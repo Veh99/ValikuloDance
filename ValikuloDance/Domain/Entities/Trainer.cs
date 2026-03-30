@@ -2,7 +2,7 @@
 {
     public class Trainer : BaseEntity
     {
-        public required Guid UserId { get; set; }
+        public required Guid TrainerId { get; set; }
         public required string Bio { get; set; }
         public required string PhotoUrl { get; set; }
         public required int ExperienceYears { get; set; }

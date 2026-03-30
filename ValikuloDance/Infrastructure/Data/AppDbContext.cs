@@ -25,14 +25,63 @@ namespace ValikuloDance.Infrastructure.Data
             modelBuilder.Entity<User>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.Email).IsUnique();
-                entity.HasIndex(e => e.TelegramChatId).IsUnique();
 
-                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.Email).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.Phone).HasMaxLength(20);
-                entity.Property(e => e.TelegramUsername).HasMaxLength(50);
-                entity.Property(e => e.Role).HasMaxLength(20);
+                // Индексы с правильным синтаксисом для PostgreSQL
+                entity.HasIndex(e => e.Email)
+                    .IsUnique()
+                    .HasFilter("\"Email\" IS NOT NULL");
+
+                entity.HasIndex(e => e.Phone).IsUnique();
+
+                entity.HasIndex(e => e.TelegramChatId)
+                    .IsUnique()
+                    .HasFilter("\"TelegramChatId\" IS NOT NULL");
+
+                entity.HasIndex(e => e.Role);
+
+                // Свойства
+                entity.Property(e => e.Name)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.Email)
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.Phone)
+                    .IsRequired()
+                    .HasMaxLength(20);
+
+                entity.Property(e => e.TelegramUsername)
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.TelegramChatId)
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.Role)
+                    .IsRequired()
+                    .HasMaxLength(20)
+                    .HasDefaultValue("Client");
+
+                // Поля аутентификации
+                entity.Property(e => e.PasswordHash)
+                    .IsRequired()
+                    .HasMaxLength(255);
+
+                entity.Property(e => e.RefreshToken)
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.RefreshTokenExpiryTime);
+
+                // Базовые поля
+                entity.Property(e => e.LastLoginAt);
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(e => e.UpdatedAt);
+
+                entity.Property(e => e.IsDeleted)
+                    .HasDefaultValue(false);
             });
 
             // Trainer
@@ -41,7 +90,7 @@ namespace ValikuloDance.Infrastructure.Data
                 entity.HasKey(e => e.Id);
                 entity.HasOne(e => e.User)
                     .WithMany()
-                    .HasForeignKey(e => e.UserId)
+                    .HasForeignKey(e => e.TrainerId)
                     .OnDelete(DeleteBehavior.Restrict);
 
                 entity.Property(e => e.Bio).HasMaxLength(1000);

@@ -41,13 +41,16 @@ namespace ValikuloDance.Migrations
                     Email = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Phone = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    TelegramChatId = table.Column<string>(type: "text", nullable: true),
-                    TelegramUsername = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
-                    Role = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    TelegramChatId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    TelegramUsername = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    Role = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Client"),
                     LastLoginAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    PasswordHash = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
+                    RefreshToken = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    RefreshTokenExpiryTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false)
+                    IsDeleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false)
                 },
                 constraints: table =>
                 {
@@ -91,7 +94,7 @@ namespace ValikuloDance.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TrainerId = table.Column<Guid>(type: "uuid", nullable: false),
                     Bio = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
                     PhotoUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     ExperienceYears = table.Column<int>(type: "integer", nullable: false),
@@ -107,8 +110,8 @@ namespace ValikuloDance.Migrations
                 {
                     table.PrimaryKey("PK_Trainers", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Trainers_Users_UserId",
-                        column: x => x.UserId,
+                        name: "FK_Trainers_Users_TrainerId",
+                        column: x => x.TrainerId,
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
@@ -226,21 +229,34 @@ namespace ValikuloDance.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Trainers_UserId",
+                name: "IX_Trainers_TrainerId",
                 table: "Trainers",
-                column: "UserId");
+                column: "TrainerId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_Email",
                 table: "Users",
                 column: "Email",
+                unique: true,
+                filter: "\"Email\" IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_Phone",
+                table: "Users",
+                column: "Phone",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_Role",
+                table: "Users",
+                column: "Role");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_TelegramChatId",
                 table: "Users",
                 column: "TelegramChatId",
-                unique: true);
+                unique: true,
+                filter: "\"TelegramChatId\" IS NOT NULL");
         }
 
         /// <inheritdoc />

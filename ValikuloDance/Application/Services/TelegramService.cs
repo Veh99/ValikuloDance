@@ -14,7 +14,7 @@ namespace ValikuloDance.Application.Services
         public TelegramService(IConfiguration configuration, ILogger<TelegramService> logger)
         {
             _httpClient = new HttpClient();
-            _botToken = configuration["Telegram:BotToken"];
+            _botToken = configuration["Telegram:BotToken"]!;
             _logger = logger;
         }
 
@@ -32,7 +32,7 @@ namespace ValikuloDance.Application.Services
                             💃 {service.Name}
                             👨‍🏫 Тренер: {trainer.Name}
                             💰 Оплата: {service.Price} ₽ (на месте)
-                            Ждем вас в студии! 💪";
+                            Ждем вас на паркете! 💪";
 
             await SendMessageAsync(user.TelegramChatId, message);
 

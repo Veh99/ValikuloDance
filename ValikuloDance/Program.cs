@@ -4,6 +4,7 @@ using ValikuloDance.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle;
 using Microsoft.OpenApi;
+using ValikuloDance.Api.Settings;
 
 namespace ValikuloDance
 {
@@ -31,7 +32,7 @@ namespace ValikuloDance
             {
                 options.AddPolicy("AllowFrontend", policy =>
                 {
-                    policy.WithOrigins("http://localhost:5173", "http://localhost:5174", "https://localhost:5173")
+                    policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
                           .AllowAnyHeader()
                           .AllowAnyMethod()
                           .AllowCredentials();
@@ -57,22 +58,27 @@ namespace ValikuloDance
             // Регистрация сервисов
             builder.Services.AddScoped<BookingService>();
             builder.Services.AddScoped<ITelegramService, TelegramService>();
+            builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+            builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<ITokenService, TokenService>();
+            builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+
 
             var app = builder.Build();
 
             // Применяем миграции при запуске
-            using (var scope = app.Services.CreateScope())
-            {
-                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                try
-                {
-                    await dbContext.Database.MigrateAsync();
-                }
-                catch (Exception ex)
-                {
-                    throw;
-                }
-            }
+            //using (var scope = app.Services.CreateScope())
+            //{
+            //    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            //    try
+            //    {
+            //        await dbContext.Database.MigrateAsync();
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        throw;
+            //    }
+            //}
 
             // Настройка pipeline
             if (app.Environment.IsDevelopment())

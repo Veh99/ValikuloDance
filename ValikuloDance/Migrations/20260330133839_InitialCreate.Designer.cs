@@ -12,7 +12,7 @@ using ValikuloDance.Infrastructure.Data;
 namespace ValikuloDance.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260329083718_InitialCreate")]
+    [Migration("20260330133839_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -244,15 +244,15 @@ namespace ValikuloDance.Migrations
                     b.Property<string>("Telegram")
                         .HasColumnType("text");
 
+                    b.Property<Guid>("TrainerId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("TrainerId");
 
                     b.ToTable("Trainers");
                 });
@@ -264,7 +264,9 @@ namespace ValikuloDance.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -272,7 +274,9 @@ namespace ValikuloDance.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
@@ -282,20 +286,37 @@ namespace ValikuloDance.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<string>("Phone")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("RefreshToken")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("RefreshTokenExpiryTime")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Role")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Client");
 
                     b.Property<string>("TelegramChatId")
-                        .HasColumnType("text");
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("TelegramUsername")
+                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
@@ -305,10 +326,17 @@ namespace ValikuloDance.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
+                        .IsUnique()
+                        .HasFilter("\"Email\" IS NOT NULL");
+
+                    b.HasIndex("Phone")
                         .IsUnique();
 
+                    b.HasIndex("Role");
+
                     b.HasIndex("TelegramChatId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"TelegramChatId\" IS NOT NULL");
 
                     b.ToTable("Users");
                 });
@@ -382,7 +410,7 @@ namespace ValikuloDance.Migrations
                 {
                     b.HasOne("ValikuloDance.Domain.Entities.User", "User")
                         .WithMany()
-                        .HasForeignKey("UserId")
+                        .HasForeignKey("TrainerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
