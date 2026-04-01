@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ValikuloDance.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using ValikuloDance.Application.DTOs.Trainer;
+using System.Reflection.Metadata;
+using ValikuloDance.Application.Interfaces;
 
 namespace ValikuloDance.Api.Controllers;
 
@@ -9,10 +12,12 @@ namespace ValikuloDance.Api.Controllers;
 public class TrainerController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly ITrainerService _trainerService;
 
-    public TrainerController(AppDbContext context)
+    public TrainerController(AppDbContext context, ITrainerService trainerService)
     {
         _context = context;
+        _trainerService = trainerService;
     }
 
     [HttpGet]
@@ -58,5 +63,12 @@ public class TrainerController : ControllerBase
             trainer.Instagram,
             trainer.User.TelegramUsername
         });
+    }
+
+    [HttpPost()]
+    public async Task<IActionResult> Add(TrainerDto request)
+    {
+        await _trainerService.Add(request);
+        return Ok();
     }
 }

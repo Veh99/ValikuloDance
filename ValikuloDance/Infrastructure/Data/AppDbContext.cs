@@ -89,9 +89,8 @@ namespace ValikuloDance.Infrastructure.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.HasOne(e => e.User)
-                    .WithMany()
-                    .HasForeignKey(e => e.TrainerId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .WithOne()
+                    .OnDelete(DeleteBehavior.SetNull);
 
                 entity.Property(e => e.Bio).HasMaxLength(1000);
                 entity.Property(e => e.PhotoUrl).HasMaxLength(500);

@@ -1,8 +1,8 @@
-﻿namespace ValikuloDance.Application.DTOs
+﻿namespace ValikuloDance.Application.DTOs.Booking
 {
     public class CreateBookingRequest
     {
-        public required Guid Id { get; set; }
+        public Guid Id { get; set; }
         public required Guid UserId { get; set; }
         public required Guid TrainerId { get; set; }
         public required Guid ServiceId { get; set; }

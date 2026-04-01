@@ -115,28 +115,14 @@ namespace ValikuloDance.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Выход из системы
-        /// </summary>
-        [HttpPost("logout")]
-        [Authorize]
-        public async Task<IActionResult> Logout()
+        [HttpGet("get-user-by-phone")]
+        public async Task<IActionResult> GetUserId(string phoneNumber)
         {
-            var userId = Guid.Parse(User.FindFirstValue("userId"));
-            await _authService.LogoutAsync(userId);
-            return Ok(new { message = "Выход выполнен успешно" });
-        }
+            var user = await _authService.GetUserByPhone(phoneNumber);
+            if (user is null)
+                return BadRequest("Пользователь не найден");
 
-        /// <summary>
-        /// Получение информации о текущем пользователе
-        /// </summary>
-        [HttpGet("me")]
-        [Authorize]
-        public async Task<IActionResult> GetCurrentUser()
-        {
-            var userId = Guid.Parse(User.FindFirstValue("userId"));
-            // Здесь нужно реализовать получение пользователя из базы
-            return Ok(new { userId });
+            return Ok(new { user.Id });
         }
     }
 }

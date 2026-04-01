@@ -1,8 +1,8 @@
-﻿using ValikuloDance.Application.DTOs;
-using ValikuloDance.Application.Interfaces;
+﻿using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
 using ValikuloDance.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using ValikuloDance.Application.DTOs.Booking;
 
 namespace ValikuloDance.Application.Services
 {
@@ -37,7 +37,8 @@ namespace ValikuloDance.Application.Services
                 throw new Exception("Услуга не найдена");
 
             // Проверяем, свободно ли время
-            var endTime = request.StartTime.AddMinutes((double)service.DurationMinutes);
+            var startTimeUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
+            var endTime = startTimeUtc.AddMinutes((double)service.DurationMinutes);
             var existingBooking = await _context.Bookings
                 .AnyAsync(b => b.TrainerId == request.TrainerId &&
                                b.StartTime < endTime &&
@@ -50,7 +51,7 @@ namespace ValikuloDance.Application.Services
             // Создаем запись
             var booking = new Booking
             {
-                Id = request.Id,
+                Id = Guid.NewGuid(),
                 UserId = request.UserId,
                 TrainerId = request.TrainerId,
                 ServiceId = request.ServiceId,
@@ -84,25 +85,37 @@ namespace ValikuloDance.Application.Services
         {
             var slots = new List<AvailableSlotResponse>();
 
-            // Рабочие часы (9:00 - 21:00)
+            // Приводим дату к UTC
+            var utcDate = date.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(date.Date, DateTimeKind.Utc)
+                : date.Date.ToUniversalTime();
+
+            // Рабочие часы (9:00 - 21:00) - предполагаем, что это локальное время
+            // Конвертируем локальное время в UTC (например, для Москвы UTC+3)
+            var timeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
             var startHour = 9;
             var endHour = 21;
 
             for (var hour = startHour; hour < endHour; hour++)
             {
-                var startTime = new DateTime(date.Year, date.Month, date.Day, hour, 0, 0);
-                var endTime = startTime.AddHours(1);
+                // Создаем локальное время
+                var localStartTime = new DateTime(utcDate.Year, utcDate.Month, utcDate.Day, hour, 0, 0);
+                var localEndTime = localStartTime.AddHours(1);
+
+                // Конвертируем в UTC для сравнения с БД
+                var startTimeUtc = TimeZoneInfo.ConvertTimeToUtc(localStartTime, timeZone);
+                var endTimeUtc = TimeZoneInfo.ConvertTimeToUtc(localEndTime, timeZone);
 
                 var isBooked = await _context.Bookings
                     .AnyAsync(b => b.TrainerId == trainerId &&
-                                   b.StartTime < endTime &&
-                                   b.EndTime > startTime &&
+                                   b.StartTime < endTimeUtc &&
+                                   b.EndTime > startTimeUtc &&
                                    b.Status != "Cancelled");
 
                 slots.Add(new AvailableSlotResponse
                 {
-                    StartTime = startTime,
-                    EndTime = endTime,
+                    StartTime = startTimeUtc,
+                    EndTime = endTimeUtc,
                     IsAvailable = !isBooked
                 });
             }

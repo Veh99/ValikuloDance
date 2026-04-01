@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ValikuloDance.Infrastructure.Data;
@@ -11,9 +12,11 @@ using ValikuloDance.Infrastructure.Data;
 namespace ValikuloDance.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260331114735_FKTrainerId")]
+    partial class FKTrainerId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -204,7 +207,6 @@ namespace ValikuloDance.Migrations
             modelBuilder.Entity("ValikuloDance.Domain.Entities.Trainer", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<string>("Bio")
@@ -241,16 +243,13 @@ namespace ValikuloDance.Migrations
                     b.Property<string>("Telegram")
                         .HasColumnType("text");
 
+                    b.Property<Guid>("TrainerId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
 
                     b.ToTable("Trainers");
                 });
@@ -407,9 +406,9 @@ namespace ValikuloDance.Migrations
             modelBuilder.Entity("ValikuloDance.Domain.Entities.Trainer", b =>
                 {
                     b.HasOne("ValikuloDance.Domain.Entities.User", "User")
-                        .WithOne()
-                        .HasForeignKey("ValikuloDance.Domain.Entities.Trainer", "UserId")
-                        .OnDelete(DeleteBehavior.SetNull)
+                        .WithMany()
+                        .HasForeignKey("Id")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("User");

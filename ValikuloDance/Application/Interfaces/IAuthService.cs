@@ -1,4 +1,5 @@
 ﻿using ValikuloDance.Application.DTOs.Auth;
+using ValikuloDance.Domain.Entities;
 
 namespace ValikuloDance.Application.Interfaces
 {
@@ -9,5 +10,6 @@ namespace ValikuloDance.Application.Interfaces
         Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenDto refreshTokenDto);
         Task<bool> ChangePasswordAsync(Guid userId, ChangePasswordDto changePasswordDto);
         Task LogoutAsync(Guid userId);
+        Task<User?> GetUserByPhone(string phoneNumber);
     }
 }

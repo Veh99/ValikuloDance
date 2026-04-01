@@ -42,9 +42,9 @@ namespace ValikuloDance.Application.Services
                 Id = Guid.NewGuid(),
                 Name = registerDto.Name,
                 Phone = registerDto.Phone,
-                Email = registerDto.Email,
-                TelegramUsername = registerDto.TelegramChatId,
-                TelegramChatId = registerDto.TelegramChatId,
+                Email = registerDto.Email ?? string.Empty,
+                TelegramUsername = registerDto.TelegramUsername,
+                TelegramChatId = registerDto.TelegramUsername,
                 Role = "Client",
                 CreatedAt = DateTime.UtcNow,
                 PasswordHash = passwordHash,
@@ -184,5 +184,16 @@ namespace ValikuloDance.Application.Services
                 await _context.SaveChangesAsync();
             }
         }
+
+        public async Task<User?> GetUserByPhone(string phoneNumber)
+        {
+            var trimmedNumber = phoneNumber.Replace(" ", "");            
+            var user = await _context.Users.FirstOrDefaultAsync(x => x.Phone == trimmedNumber);
+            if(user != null)
+            {
+                return user;
+            }
+            return null;
+        } 
     }
 }

@@ -1,5 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using ValikuloDance.Application.DTOs;
+using ValikuloDance.Application.DTOs.Booking;
 using ValikuloDance.Application.Services;
 
 namespace ValikuloDance.Api.Controllers;
