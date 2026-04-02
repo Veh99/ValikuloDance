@@ -21,7 +21,11 @@ namespace ValikuloDance.Application.Services
 
         public async Task<BookingResponse> CreateBookingAsync(CreateBookingRequest request, ClaimsPrincipal userClaims)
         {
-            var userIdClaim = userClaims.FindFirst("sub")?.Value;
+            var userIdClaim = userClaims.FindFirst("sub")?.Value
+               ?? userClaims.FindFirst(ClaimTypes.NameIdentifier)?.Value
+               ?? userClaims.FindFirst("id")?.Value
+               ?? userClaims.FindFirst("userId")?.Value
+               ?? userClaims.FindFirst(ClaimTypes.PrimarySid)?.Value;
             if (string.IsNullOrEmpty(userIdClaim))
                 throw new Exception("Пользователь не авторизован");
 

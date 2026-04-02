@@ -1,12 +1,13 @@
-﻿using ValikuloDance.Application.Interfaces;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+using Swashbuckle;
+using System.Text;
+using ValikuloDance.Api.Settings;
+using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Application.Services;
 using ValikuloDance.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
-using Swashbuckle;
-using Microsoft.OpenApi;
-using ValikuloDance.Api.Settings;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
 
 namespace ValikuloDance
 {
@@ -19,6 +20,8 @@ namespace ValikuloDance
             // Добавляем сервисы
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
+
+            var key = Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:SecretKey"]!);
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
