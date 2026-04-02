@@ -2,21 +2,18 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ValikuloDance.Infrastructure.Data;
 
 #nullable disable
 
-namespace ValikuloDance.Migrations
+namespace ValikuloDance.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260330133839_InitialCreate")]
-    partial class InitialCreate
+    partial class AppDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -244,15 +241,16 @@ namespace ValikuloDance.Migrations
                     b.Property<string>("Telegram")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("TrainerId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("TrainerId");
+                    b.HasIndex("UserId")
+                        .IsUnique();
 
                     b.ToTable("Trainers");
                 });
@@ -409,9 +407,9 @@ namespace ValikuloDance.Migrations
             modelBuilder.Entity("ValikuloDance.Domain.Entities.Trainer", b =>
                 {
                     b.HasOne("ValikuloDance.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("TrainerId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .WithOne()
+                        .HasForeignKey("ValikuloDance.Domain.Entities.Trainer", "UserId")
+                        .OnDelete(DeleteBehavior.SetNull)
                         .IsRequired();
 
                     b.Navigation("User");

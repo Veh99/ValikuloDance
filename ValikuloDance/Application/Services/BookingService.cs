@@ -1,8 +1,10 @@
-﻿using ValikuloDance.Application.Interfaces;
+﻿using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using Telegram.Bot.Types;
+using ValikuloDance.Application.DTOs.Booking;
+using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
 using ValikuloDance.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
-using ValikuloDance.Application.DTOs.Booking;
 
 namespace ValikuloDance.Application.Services
 {
@@ -17,55 +19,58 @@ namespace ValikuloDance.Application.Services
             _telegramService = telegramService;
         }
 
-        public async Task<BookingResponse> CreateBookingAsync(CreateBookingRequest request)
+        public async Task<BookingResponse> CreateBookingAsync(CreateBookingRequest request, ClaimsPrincipal userClaims)
         {
-            // Проверяем существование пользователя
-            var user = await _context.Users.FindAsync(request.UserId);
+            var userIdClaim = userClaims.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdClaim))
+                throw new Exception("Пользователь не авторизован");
+
+            var userId = Guid.Parse(userIdClaim);
+
+            var user = await _context.Users.FindAsync(userId);
             if (user == null)
                 throw new Exception("Пользователь не найден");
 
-            // Проверяем существование тренера
             var trainer = await _context.Trainers
                 .Include(t => t.User)
                 .FirstOrDefaultAsync(t => t.Id == request.TrainerId);
+
             if (trainer == null)
                 throw new Exception("Тренер не найден");
 
-            // Проверяем существование услуги
             var service = await _context.Services.FindAsync(request.ServiceId);
             if (service == null)
                 throw new Exception("Услуга не найдена");
 
-            // Проверяем, свободно ли время
-            var startTimeUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
-            var endTime = startTimeUtc.AddMinutes((double)service.DurationMinutes);
-            var existingBooking = await _context.Bookings
-                .AnyAsync(b => b.TrainerId == request.TrainerId &&
-                               b.StartTime < endTime &&
-                               b.EndTime > request.StartTime &&
-                               b.Status != "Cancelled");
+            var startTimeUtc = request.StartTime;
+            var endTimeUtc = startTimeUtc.AddMinutes((double)service.DurationMinutes);
 
-            if (existingBooking)
+            var exists = await _context.Bookings.AnyAsync(b =>
+                b.TrainerId == request.TrainerId &&
+                b.StartTime < endTimeUtc &&
+                b.EndTime > startTimeUtc &&
+                b.Status != "Cancelled"
+            );
+
+            if (exists)
                 throw new Exception("Это время уже занято");
 
-            // Создаем запись
             var booking = new Booking
             {
                 Id = Guid.NewGuid(),
-                UserId = request.UserId,
+                UserId = userId,
                 TrainerId = request.TrainerId,
                 ServiceId = request.ServiceId,
-                StartTime = request.StartTime,
+                StartTime = startTimeUtc,
+                EndTime = endTimeUtc,
                 CreatedAt = DateTime.UtcNow,
-                EndTime = endTime,
                 Notes = request.Notes,
-                Status = "Pending"
+                Status = "Confirmed"
             };
 
             _context.Bookings.Add(booking);
             await _context.SaveChangesAsync();
 
-            // Отправляем уведомления в Telegram
             await _telegramService.SendBookingConfirmationAsync(booking);
 
             return new BookingResponse
@@ -85,13 +90,10 @@ namespace ValikuloDance.Application.Services
         {
             var slots = new List<AvailableSlotResponse>();
 
-            // Приводим дату к UTC
             var utcDate = date.Kind == DateTimeKind.Unspecified
                 ? DateTime.SpecifyKind(date.Date, DateTimeKind.Utc)
                 : date.Date.ToUniversalTime();
 
-            // Рабочие часы (9:00 - 21:00) - предполагаем, что это локальное время
-            // Конвертируем локальное время в UTC (например, для Москвы UTC+3)
             var timeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
             var startHour = 9;
             var endHour = 21;
@@ -146,12 +148,14 @@ namespace ValikuloDance.Application.Services
             }).ToList();
         }
 
+        //public async Task ConfirmBookingAsync(Guid bookingId)
+        //{
+        //    var booking = await GetBookingAsync(bookingId);
+        //}
+
         public async Task<bool> CancelBookingAsync(Guid bookingId, Guid userId)
         {
-            var booking = await _context.Bookings
-                .Include(b => b.User)
-                .Include(b => b.Trainer).ThenInclude(t => t.User)
-                .FirstOrDefaultAsync(b => b.Id == bookingId && b.UserId == userId);
+            var booking = await GetBookingAsync(bookingId, userId);
 
             if (booking == null)
                 return false;
@@ -168,6 +172,16 @@ namespace ValikuloDance.Application.Services
             await _telegramService.SendBookingCancellationAsync(booking);
 
             return true;
+        }
+
+        private async Task<Booking?> GetBookingAsync(Guid bookingId, Guid userId)
+        {
+            var booking = await _context.Bookings
+                .Include(b => b.User)
+                .Include(b => b.Trainer).ThenInclude(t => t.User)
+                .FirstOrDefaultAsync(b => b.Id == bookingId && b.UserId == userId);
+
+            return booking;
         }
     }
 }

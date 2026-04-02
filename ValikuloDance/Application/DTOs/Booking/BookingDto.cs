@@ -2,11 +2,9 @@
 {
     public class CreateBookingRequest
     {
-        public Guid Id { get; set; }
-        public required Guid UserId { get; set; }
-        public required Guid TrainerId { get; set; }
-        public required Guid ServiceId { get; set; }
-        public required DateTime StartTime { get; set; }
+        public Guid TrainerId { get; set; }
+        public Guid ServiceId { get; set; }
+        public DateTime StartTime { get; set; }
         public string? Notes { get; set; }
     }
 

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace ValikuloDance.Migrations
+namespace ValikuloDance.Data.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -94,7 +94,6 @@ namespace ValikuloDance.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    TrainerId = table.Column<Guid>(type: "uuid", nullable: false),
                     Bio = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
                     PhotoUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     ExperienceYears = table.Column<int>(type: "integer", nullable: false),
@@ -102,6 +101,7 @@ namespace ValikuloDance.Migrations
                     Instagram = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     Telegram = table.Column<string>(type: "text", nullable: true),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     IsDeleted = table.Column<bool>(type: "boolean", nullable: false)
@@ -110,11 +110,11 @@ namespace ValikuloDance.Migrations
                 {
                     table.PrimaryKey("PK_Trainers", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Trainers_Users_TrainerId",
-                        column: x => x.TrainerId,
+                        name: "FK_Trainers_Users_UserId",
+                        column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -229,9 +229,10 @@ namespace ValikuloDance.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Trainers_TrainerId",
+                name: "IX_Trainers_UserId",
                 table: "Trainers",
-                column: "TrainerId");
+                column: "UserId",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_Email",

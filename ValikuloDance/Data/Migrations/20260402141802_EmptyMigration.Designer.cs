@@ -9,11 +9,11 @@ using ValikuloDance.Infrastructure.Data;
 
 #nullable disable
 
-namespace ValikuloDance.Migrations
+namespace ValikuloDance.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260331121831_FKTrainerId2")]
-    partial class FKTrainerId2
+    [Migration("20260402141802_EmptyMigration")]
+    partial class EmptyMigration
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

@@ -9,11 +9,11 @@ using ValikuloDance.Infrastructure.Data;
 
 #nullable disable
 
-namespace ValikuloDance.Migrations
+namespace ValikuloDance.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260331114735_FKTrainerId")]
-    partial class FKTrainerId
+    [Migration("20260402141921_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -207,6 +207,7 @@ namespace ValikuloDance.Migrations
             modelBuilder.Entity("ValikuloDance.Domain.Entities.Trainer", b =>
                 {
                     b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<string>("Bio")
@@ -243,13 +244,16 @@ namespace ValikuloDance.Migrations
                     b.Property<string>("Telegram")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("TrainerId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
 
                     b.ToTable("Trainers");
                 });
@@ -406,9 +410,9 @@ namespace ValikuloDance.Migrations
             modelBuilder.Entity("ValikuloDance.Domain.Entities.Trainer", b =>
                 {
                     b.HasOne("ValikuloDance.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("Id")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .WithOne()
+                        .HasForeignKey("ValikuloDance.Domain.Entities.Trainer", "UserId")
+                        .OnDelete(DeleteBehavior.SetNull)
                         .IsRequired();
 
                     b.Navigation("User");

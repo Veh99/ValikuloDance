@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using ValikuloDance.Application.DTOs.Booking;
 using ValikuloDance.Application.Services;
 
@@ -17,19 +18,12 @@ public class BookingController : ControllerBase
         _logger = logger;
     }
 
+    [Authorize]
     [HttpPost]
     public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
     {
-        try
-        {
-            var booking = await _bookingService.CreateBookingAsync(request);
-            return Ok(booking);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка при создании записи");
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _bookingService.CreateBookingAsync(request, User);
+        return Ok(result);
     }
 
     [HttpGet("available-slots/{trainerId}")]
@@ -45,6 +39,13 @@ public class BookingController : ControllerBase
         var bookings = await _bookingService.GetUserBookingsAsync(userId);
         return Ok(bookings);
     }
+
+    //[HttpPost("confirm-booking")]
+    //public async Task<IActionResult> ConfirmBooking(Guid bookingId, [FromQuery])
+    //{
+    //    var booking = await _bookingService
+    //}
+
 
     [HttpDelete("{bookingId}")]
     public async Task<IActionResult> CancelBooking(Guid bookingId, [FromQuery] Guid userId)

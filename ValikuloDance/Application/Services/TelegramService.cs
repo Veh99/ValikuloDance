@@ -164,16 +164,16 @@ namespace ValikuloDance.Application.Services
 
             try
             {
-                var cleanUsername = username.StartsWith("@") ? username.Substring(1) : username;
+                //var cleanUsername = username.StartsWith("@") ? username.Substring(1) : username;
 
                 var updates = await _botClient.GetUpdates();
 
                 var update = updates.FirstOrDefault(u =>
-                    u.Message?.Chat?.Username?.Equals(cleanUsername, StringComparison.OrdinalIgnoreCase) == true);
+                    u.Message?.Chat?.Username?.Equals(username, StringComparison.OrdinalIgnoreCase) == true);
 
                 if (update?.Message?.Chat == null)
                 {
-                    _logger.LogError($"У пользователя нет чата с ботом @{username}. Чтобы получать уведомления, надо начать диалог с ботом");
+                    _logger.LogError($"У пользователя нет чата с ботом {username}. Чтобы получать уведомления, надо начать диалог с ботом");
                     return;
                 }
                 var chat = update.Message.Chat;
