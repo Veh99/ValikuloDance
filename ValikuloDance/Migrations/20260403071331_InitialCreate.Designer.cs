@@ -9,10 +9,10 @@ using ValikuloDance.Infrastructure.Data;
 
 #nullable disable
 
-namespace ValikuloDance.Data.Migrations
+namespace ValikuloDance.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260402141921_InitialCreate")]
+    [Migration("20260403071331_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />

@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Options;
-using JsonWebTokens = Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -8,20 +7,28 @@ using System.Text;
 using ValikuloDance.Api.Settings;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
+using ValikuloDance.Resources;
+using JsonWebTokens = Microsoft.IdentityModel.JsonWebTokens;
 
 namespace ValikuloDance.Application.Services
 {
     public class TokenService : ITokenService
     {
         private readonly JwtSettings _jwtSettings;
+        private readonly IConfiguration _configuration;
 
-        public TokenService(IOptions<JwtSettings> jwtSettings)
+        public TokenService(IOptions<JwtSettings> jwtSettings, IConfiguration configuration)
         {
             _jwtSettings = jwtSettings.Value;
+            _configuration = configuration;
         }
 
-        public string GenerateToken(User user)  // ← теперь принимает User
+        public string GenerateToken(User user)
         {
+            var secretKey = _configuration["JwtSettings:SecretKey"]!;
+            var issuer = _configuration["JwtSettings:Issuer"];
+            var audience = _configuration["JwtSettings:Audience"];
+
             var claims = new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
@@ -33,14 +40,18 @@ namespace ValikuloDance.Application.Services
                 new Claim("role", user.Role)
             };
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
+            var encodeKey = Encoding.UTF8.GetBytes(StaticJWTKey.JWTKey);
+            Console.WriteLine("SECRET: '" + secretKey + "'");
+            Console.WriteLine("ENCODe: '" + encodeKey.Length + "'");
+            var key = new SymmetricSecurityKey(encodeKey);
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var token = new JwtSecurityToken(
-                issuer: _jwtSettings.Issuer,
-                audience: _jwtSettings.Audience,
+                issuer: issuer,
+                audience: audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes),
+                //notBefore: DateTime.UtcNow,
+                expires: DateTime.UtcNow.AddMinutes(60),
                 signingCredentials: credentials
             );
 

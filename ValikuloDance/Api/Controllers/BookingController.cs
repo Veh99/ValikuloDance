@@ -33,6 +33,7 @@ public class BookingController : ControllerBase
         return Ok(slots);
     }
 
+    [Authorize]
     [HttpGet("user/{userId}")]
     public async Task<IActionResult> GetUserBookings(Guid userId)
     {

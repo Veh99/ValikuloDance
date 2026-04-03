@@ -97,6 +97,7 @@ namespace ValikuloDance.Application.Services
 
             // Генерируем токены
             var token = _tokenService.GenerateToken(user);
+            Console.WriteLine("TOKEN: " + token);
             var refreshToken = _tokenService.GenerateRefreshToken();
 
             // Обновляем refresh token

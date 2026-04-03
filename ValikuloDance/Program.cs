@@ -1,13 +1,14 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
-using Swashbuckle;
+using NSwag;
+using NSwag.Generation.Processors.Security;
 using System.Text;
 using ValikuloDance.Api.Settings;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Application.Services;
 using ValikuloDance.Infrastructure.Data;
+using ValikuloDance.Resources;
 
 namespace ValikuloDance
 {
@@ -16,12 +17,12 @@ namespace ValikuloDance
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-
             // Добавляем сервисы
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
 
-            var key = Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:SecretKey"]!);
+            var key = Encoding.UTF8.GetBytes(StaticJWTKey.JWTKey);
+            Console.WriteLine($"program: '{key.Length}'");
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -34,22 +35,35 @@ namespace ValikuloDance
 
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuer = false,
-                    ValidateAudience = false,
-                    ValidateIssuerSigningKey = true,
+                    ValidateIssuer = true,
+                    ValidIssuer = builder.Configuration["JwtSettings:Issuer"]!,
+                    ValidateAudience = true,
+                    ValidAudience = builder.Configuration["JwtSettings:Audience"],
+                    ValidateIssuerSigningKey = false,
                     IssuerSigningKey = new SymmetricSecurityKey(key),
-                    ValidateLifetime = true
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromMinutes(5)
                 };
             });
 
-            builder.Services.AddSwaggerGen(c =>
+            builder.Services.AddOpenApiDocument(config =>
             {
-                c.SwaggerDoc("v1", new OpenApiInfo
+                config.DocumentName = "v1";
+                config.Title = "Dance Studio API";
+                config.Version = "v1";
+                config.Description = "API для танцевальной студии";
+
+                config.AddSecurity("Bearer", new OpenApiSecurityScheme
                 {
-                    Title = "Dance Studio API",
-                    Version = "v1",
-                    Description = "API для танцевальной студии"
+                    Type = OpenApiSecuritySchemeType.Http,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT",
+                    Description = "Введите JWT токен. Пример: 'Bearer {token}'",
+                    Name = "Authorization",
+                    In = OpenApiSecurityApiKeyLocation.Header
                 });
+
+                config.OperationProcessors.Add(new AspNetCoreOperationSecurityScopeProcessor("Bearer"));
             });
 
             // Настройка CORS
@@ -110,8 +124,8 @@ namespace ValikuloDance
             // Настройка pipeline
             if (app.Environment.IsDevelopment())
             {
-                app.UseSwagger();
-                app.UseSwaggerUI();
+                app.UseOpenApi(); // вместо UseSwagger
+                app.UseSwaggerUi(); // вместо UseSwaggerUI
             }
 
             app.UseHttpsRedirection();

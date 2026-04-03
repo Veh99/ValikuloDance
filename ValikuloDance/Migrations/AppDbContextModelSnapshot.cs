@@ -8,7 +8,7 @@ using ValikuloDance.Infrastructure.Data;
 
 #nullable disable
 
-namespace ValikuloDance.Data.Migrations
+namespace ValikuloDance.Migrations
 {
     [DbContext(typeof(AppDbContext))]
     partial class AppDbContextModelSnapshot : ModelSnapshot
