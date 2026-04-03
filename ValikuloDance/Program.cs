@@ -22,7 +22,6 @@ namespace ValikuloDance
             builder.Services.AddEndpointsApiExplorer();
 
             var key = Encoding.UTF8.GetBytes(StaticJWTKey.JWTKey);
-            Console.WriteLine($"program: '{key.Length}'");
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -39,7 +38,7 @@ namespace ValikuloDance
                     ValidIssuer = builder.Configuration["JwtSettings:Issuer"]!,
                     ValidateAudience = true,
                     ValidAudience = builder.Configuration["JwtSettings:Audience"],
-                    ValidateIssuerSigningKey = false,
+                    ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromMinutes(5)

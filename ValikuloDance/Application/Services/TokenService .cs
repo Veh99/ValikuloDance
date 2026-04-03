@@ -41,8 +41,7 @@ namespace ValikuloDance.Application.Services
             };
 
             var encodeKey = Encoding.UTF8.GetBytes(StaticJWTKey.JWTKey);
-            Console.WriteLine("SECRET: '" + secretKey + "'");
-            Console.WriteLine("ENCODe: '" + encodeKey.Length + "'");
+            
             var key = new SymmetricSecurityKey(encodeKey);
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 

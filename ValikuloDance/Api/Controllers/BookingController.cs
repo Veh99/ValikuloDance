@@ -34,10 +34,10 @@ public class BookingController : ControllerBase
     }
 
     [Authorize]
-    [HttpGet("user/{userId}")]
-    public async Task<IActionResult> GetUserBookings(Guid userId)
+    [HttpGet("user-bookings")]
+    public async Task<IActionResult> GetUserBookings()
     {
-        var bookings = await _bookingService.GetUserBookingsAsync(userId);
+        var bookings = await _bookingService.GetUserBookingsAsync(User);
         return Ok(bookings);
     }
 
@@ -47,13 +47,13 @@ public class BookingController : ControllerBase
     //    var booking = await _bookingService
     //}
 
-
+    [Authorize]
     [HttpDelete("{bookingId}")]
-    public async Task<IActionResult> CancelBooking(Guid bookingId, [FromQuery] Guid userId)
+    public async Task<IActionResult> CancelBooking(Guid bookingId)
     {
         try
         {
-            var result = await _bookingService.CancelBookingAsync(bookingId, userId);
+            var result = await _bookingService.CancelBookingAsync(bookingId, User);
             if (!result)
                 return NotFound(new { error = "Запись не найдена" });
 

@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Telegram.Bot.Types;
 using ValikuloDance.Application.DTOs.Booking;
@@ -47,6 +48,10 @@ namespace ValikuloDance.Application.Services
                 throw new Exception("Услуга не найдена");
 
             var startTimeUtc = request.StartTime;
+            if(startTimeUtc < DateTime.UtcNow)
+            {
+                throw new Exception("Вы застряли в прошлом!");
+            }
             var endTimeUtc = startTimeUtc.AddMinutes((double)service.DurationMinutes);
 
             var exists = await _context.Bookings.AnyAsync(b =>
@@ -92,6 +97,13 @@ namespace ValikuloDance.Application.Services
 
         public async Task<List<AvailableSlotResponse>> GetAvailableSlotsAsync(Guid trainerId, DateTime date)
         {
+            var trainer = await _context.Trainers
+                .Include(t => t.User)
+                .FirstOrDefaultAsync(t => t.Id == trainerId);
+
+            if (trainer == null)
+                throw new Exception("Тренер не найден");
+
             var slots = new List<AvailableSlotResponse>();
 
             var utcDate = date.Kind == DateTimeKind.Unspecified
@@ -104,19 +116,18 @@ namespace ValikuloDance.Application.Services
 
             for (var hour = startHour; hour < endHour; hour++)
             {
-                // Создаем локальное время
                 var localStartTime = new DateTime(utcDate.Year, utcDate.Month, utcDate.Day, hour, 0, 0);
                 var localEndTime = localStartTime.AddHours(1);
 
-                // Конвертируем в UTC для сравнения с БД
                 var startTimeUtc = TimeZoneInfo.ConvertTimeToUtc(localStartTime, timeZone);
                 var endTimeUtc = TimeZoneInfo.ConvertTimeToUtc(localEndTime, timeZone);
 
-                var isBooked = await _context.Bookings
-                    .AnyAsync(b => b.TrainerId == trainerId &&
-                                   b.StartTime < endTimeUtc &&
-                                   b.EndTime > startTimeUtc &&
-                                   b.Status != "Cancelled");
+                var isBooked = await _context.Bookings.AnyAsync(b =>
+                    b.TrainerId == trainerId &&
+                    b.StartTime < endTimeUtc &&
+                    b.EndTime > startTimeUtc &&
+                    b.Status != "Cancelled"
+                );
 
                 slots.Add(new AvailableSlotResponse
                 {
@@ -129,13 +140,25 @@ namespace ValikuloDance.Application.Services
             return slots;
         }
 
-        public async Task<List<BookingResponse>> GetUserBookingsAsync(Guid userId)
+        public async Task<List<BookingResponse>> GetUserBookingsAsync(ClaimsPrincipal userClaims)
         {
+            var userIdClaim = userClaims.FindFirst("sub")?.Value
+               ?? userClaims.FindFirst(ClaimTypes.NameIdentifier)?.Value
+               ?? userClaims.FindFirst("id")?.Value
+               ?? userClaims.FindFirst("userId")?.Value
+               ?? userClaims.FindFirst(ClaimTypes.PrimarySid)?.Value;
+
+            if (string.IsNullOrEmpty(userIdClaim))
+                throw new UnauthorizedAccessException("Пользователь не авторизован");
+
+            if (!Guid.TryParse(userIdClaim, out var userId))
+                throw new ArgumentException("Неверный формат ID пользователя");
+
             var bookings = await _context.Bookings
                 .Include(b => b.User)
                 .Include(b => b.Trainer).ThenInclude(t => t.User)
                 .Include(b => b.Service)
-                .Where(b => b.UserId == userId && b.StartTime >= DateTime.UtcNow)
+                .Where(b => b.UserId == userId)
                 .OrderBy(b => b.StartTime)
                 .ToListAsync();
 
@@ -157,19 +180,32 @@ namespace ValikuloDance.Application.Services
         //    var booking = await GetBookingAsync(bookingId);
         //}
 
-        public async Task<bool> CancelBookingAsync(Guid bookingId, Guid userId)
+        public async Task<bool> CancelBookingAsync(Guid bookingId, ClaimsPrincipal userClaims)
         {
+            var userIdClaim = userClaims.FindFirst("sub")?.Value
+               ?? userClaims.FindFirst(ClaimTypes.NameIdentifier)?.Value
+               ?? userClaims.FindFirst("id")?.Value
+               ?? userClaims.FindFirst("userId")?.Value
+               ?? userClaims.FindFirst(ClaimTypes.PrimarySid)?.Value;
+
+            if (string.IsNullOrEmpty(userIdClaim))
+                throw new UnauthorizedAccessException("Пользователь не авторизован");
+
+            if (!Guid.TryParse(userIdClaim, out var userId))
+                throw new ArgumentException("Неверный формат ID пользователя");
+
             var booking = await GetBookingAsync(bookingId, userId);
 
             if (booking == null)
                 return false;
 
-            if (booking.StartTime < DateTime.UtcNow.AddHours(2))
+            if (booking.StartTime < DateTime.UtcNow.AddHours(1))
                 throw new Exception("Отмена возможна не позднее чем за 2 часа до занятия");
 
             booking.Status = "Cancelled";
             booking.UpdatedAt = DateTime.UtcNow;
 
+            _context.Remove(booking);
             await _context.SaveChangesAsync();
 
             // Отправляем уведомление об отмене
