@@ -1,7 +1,5 @@
-﻿using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using Telegram.Bot.Types;
 using ValikuloDance.Application.DTOs.Booking;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
@@ -27,31 +25,35 @@ namespace ValikuloDance.Application.Services
                ?? userClaims.FindFirst("id")?.Value
                ?? userClaims.FindFirst("userId")?.Value
                ?? userClaims.FindFirst(ClaimTypes.PrimarySid)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim))
-                throw new Exception("Пользователь не авторизован");
 
-            var userId = Guid.Parse(userIdClaim);
+            if (string.IsNullOrEmpty(userIdClaim))
+                throw new UnauthorizedAccessException("Пользователь не авторизован");
+
+            if (!Guid.TryParse(userIdClaim, out var userId))
+                throw new UnauthorizedAccessException("Некорректный идентификатор пользователя");
 
             var user = await _context.Users.FindAsync(userId);
             if (user == null)
-                throw new Exception("Пользователь не найден");
+                throw new KeyNotFoundException("Пользователь не найден");
 
             var trainer = await _context.Trainers
                 .Include(t => t.User)
                 .FirstOrDefaultAsync(t => t.Id == request.TrainerId);
 
             if (trainer == null)
-                throw new Exception("Тренер не найден");
+                throw new KeyNotFoundException("Тренер не найден");
 
             var service = await _context.Services.FindAsync(request.ServiceId);
             if (service == null)
-                throw new Exception("Услуга не найдена");
+                throw new KeyNotFoundException("Услуга не найдена");
 
-            var startTimeUtc = request.StartTime;
-            if(startTimeUtc < DateTime.UtcNow)
-            {
-                throw new Exception("Вы застряли в прошлом!");
-            }
+            var startTimeUtc = request.StartTime.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc)
+                : request.StartTime.ToUniversalTime();
+
+            if (startTimeUtc < DateTime.UtcNow)
+                throw new InvalidOperationException("Нельзя создать запись на прошедшее время");
+
             var endTimeUtc = startTimeUtc.AddMinutes((double)service.DurationMinutes);
 
             var exists = await _context.Bookings.AnyAsync(b =>
@@ -62,7 +64,7 @@ namespace ValikuloDance.Application.Services
             );
 
             if (exists)
-                throw new Exception("Это время уже занято");
+                throw new InvalidOperationException("Это время уже занято");
 
             var booking = new Booking
             {
@@ -80,7 +82,13 @@ namespace ValikuloDance.Application.Services
             _context.Bookings.Add(booking);
             await _context.SaveChangesAsync();
 
-            await _telegramService.SendBookingConfirmationAsync(booking);
+            var bookingForNotification = await _context.Bookings
+                .Include(b => b.User)
+                .Include(b => b.Trainer).ThenInclude(t => t.User)
+                .Include(b => b.Service)
+                .FirstAsync(b => b.Id == booking.Id);
+
+            await _telegramService.SendBookingConfirmationAsync(bookingForNotification);
 
             return new BookingResponse
             {
@@ -102,7 +110,7 @@ namespace ValikuloDance.Application.Services
                 .FirstOrDefaultAsync(t => t.Id == trainerId);
 
             if (trainer == null)
-                throw new Exception("Тренер не найден");
+                throw new KeyNotFoundException("Тренер не найден");
 
             var slots = new List<AvailableSlotResponse>();
 
@@ -110,7 +118,7 @@ namespace ValikuloDance.Application.Services
                 ? DateTime.SpecifyKind(date.Date, DateTimeKind.Utc)
                 : date.Date.ToUniversalTime();
 
-            var timeZone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            var timeZone = GetMoscowTimeZone();
             var startHour = 9;
             var endHour = 21;
 
@@ -175,11 +183,6 @@ namespace ValikuloDance.Application.Services
             }).ToList();
         }
 
-        //public async Task ConfirmBookingAsync(Guid bookingId)
-        //{
-        //    var booking = await GetBookingAsync(bookingId);
-        //}
-
         public async Task<bool> CancelBookingAsync(Guid bookingId, ClaimsPrincipal userClaims)
         {
             var userIdClaim = userClaims.FindFirst("sub")?.Value
@@ -200,7 +203,7 @@ namespace ValikuloDance.Application.Services
                 return false;
 
             if (booking.StartTime < DateTime.UtcNow.AddHours(1))
-                throw new Exception("Отмена возможна не позднее чем за 2 часа до занятия");
+                throw new InvalidOperationException("Отмена возможна не позднее чем за 2 часа до занятия");
 
             booking.Status = "Cancelled";
             booking.UpdatedAt = DateTime.UtcNow;
@@ -208,7 +211,6 @@ namespace ValikuloDance.Application.Services
             _context.Remove(booking);
             await _context.SaveChangesAsync();
 
-            // Отправляем уведомление об отмене
             await _telegramService.SendBookingCancellationAsync(booking);
 
             return true;
@@ -216,12 +218,23 @@ namespace ValikuloDance.Application.Services
 
         private async Task<Booking?> GetBookingAsync(Guid bookingId, Guid userId)
         {
-            var booking = await _context.Bookings
+            return await _context.Bookings
                 .Include(b => b.User)
                 .Include(b => b.Trainer).ThenInclude(t => t.User)
+                .Include(b => b.Service)
                 .FirstOrDefaultAsync(b => b.Id == bookingId && b.UserId == userId);
+        }
 
-            return booking;
+        private static TimeZoneInfo GetMoscowTimeZone()
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Europe/Moscow");
+            }
         }
     }
 }

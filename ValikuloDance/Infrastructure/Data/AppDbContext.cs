@@ -16,6 +16,7 @@ namespace ValikuloDance.Infrastructure.Data
         public DbSet<Booking> Bookings { get; set; }
         public DbSet<Subscription> Subscriptions { get; set; }
         public DbSet<ScheduleSlot> ScheduleSlots { get; set; }
+        public DbSet<TelegramChatBinding> TelegramChatBindings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -157,6 +158,37 @@ namespace ValikuloDance.Infrastructure.Data
                     .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasIndex(e => new { e.TrainerId, e.StartTime }).IsUnique();
+            });
+
+            modelBuilder.Entity<TelegramChatBinding>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.TelegramChatBindings)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.UserId)
+                    .IsUnique()
+                    .HasFilter("\"IsDeleted\" = false");
+
+                entity.HasIndex(e => e.TelegramChatId)
+                    .IsUnique()
+                    .HasFilter("\"IsDeleted\" = false");
+
+                entity.Property(e => e.TelegramChatId)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.TelegramUsername)
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(e => e.IsDeleted)
+                    .HasDefaultValue(false);
             });
         }
     }

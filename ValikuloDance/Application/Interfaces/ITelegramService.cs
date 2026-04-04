@@ -1,4 +1,5 @@
-﻿using ValikuloDance.Domain.Entities;
+using Telegram.Bot.Types;
+using ValikuloDance.Domain.Entities;
 
 namespace ValikuloDance.Application.Interfaces
 {
@@ -7,5 +8,7 @@ namespace ValikuloDance.Application.Interfaces
         Task SendBookingConfirmationAsync(Booking booking);
         Task SendBookingReminderAsync(Booking booking);
         Task SendBookingCancellationAsync(Booking booking);
+        Task UpsertChatBindingAsync(Guid userId, string telegramChatId, string? telegramUsername);
+        Task HandleUpdateAsync(Update update);
     }
 }

@@ -19,6 +19,7 @@
         // Навигационные свойства
         public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
         public virtual ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
+        public virtual ICollection<TelegramChatBinding> TelegramChatBindings { get; set; } = new List<TelegramChatBinding>();
 
     }
 }

@@ -22,8 +22,32 @@ public class BookingController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
     {
-        var result = await _bookingService.CreateBookingAsync(request, User);
-        return Ok(result);
+        try
+        {
+            var result = await _bookingService.CreateBookingAsync(request, User);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка при создании записи");
+            return StatusCode(500, new { message = "Внутренняя ошибка сервера" });
+        }
     }
 
     [HttpGet("available-slots/{trainerId}")]

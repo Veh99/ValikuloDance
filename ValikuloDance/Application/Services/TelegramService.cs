@@ -1,7 +1,9 @@
-﻿using Telegram.Bot;
+using Microsoft.EntityFrameworkCore;
+using Telegram.Bot;
 using Telegram.Bot.Types;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
+using ValikuloDance.Infrastructure.Data;
 
 namespace ValikuloDance.Application.Services
 {
@@ -9,80 +11,112 @@ namespace ValikuloDance.Application.Services
     {
         private readonly ITelegramBotClient _botClient;
         private readonly ILogger<TelegramService> _logger;
+        private readonly AppDbContext _context;
 
-        public TelegramService(IConfiguration configuration, ILogger<TelegramService> logger)
+        public TelegramService(IConfiguration configuration, ILogger<TelegramService> logger, AppDbContext context)
         {
             _logger = logger;
+            _context = context;
             var botToken = configuration["Telegram:BotToken"]!;
             _botClient = new TelegramBotClient(botToken);
+        }
+
+        public async Task HandleUpdateAsync(Update update)
+        {
+            var message = update.Message;
+            if (message?.Chat == null)
+                return;
+
+            var chatId = message.Chat.Id.ToString();
+            var telegramUsername = NormalizeUsername(message.From?.Username ?? message.Chat.Username);
+            var text = message.Text?.Trim();
+
+            if (string.IsNullOrWhiteSpace(telegramUsername))
+            {
+                await _botClient.SendMessage(
+                    chatId: new ChatId(message.Chat.Id),
+                    text: "Не удалось определить ваш Telegram username. Добавьте username в настройках Telegram и повторите /start.");
+                return;
+            }
+
+            var user = await FindUserByTelegramUsernameAsync(telegramUsername);
+            if (user == null)
+            {
+                await _botClient.SendMessage(
+                    chatId: new ChatId(message.Chat.Id),
+                    text: $"Пользователь с username @{telegramUsername} не найден. Укажите этот username в профиле на сайте и снова отправьте /start.");
+                return;
+            }
+
+            await UpsertChatBindingAsync(user.Id, chatId, telegramUsername);
+
+            if (text != null && text.StartsWith("/start", StringComparison.OrdinalIgnoreCase))
+            {
+                await _botClient.SendMessage(
+                    chatId: new ChatId(message.Chat.Id),
+                    text: "Telegram успешно привязан. Теперь вы будете получать уведомления о записях.");
+            }
         }
 
         public async Task SendBookingConfirmationAsync(Booking booking)
         {
             try
             {
-                if (booking == null)
+                if (booking?.User == null)
                 {
-                    _logger.LogWarning("Booking is null");
+                    _logger.LogWarning("Booking or user is null for confirmation");
                     return;
                 }
 
-                var user = booking.User;
                 var trainer = booking.Trainer?.User;
                 var service = booking.Service;
-
-                if (user == null)
-                {
-                    _logger.LogWarning($"User not found for booking {booking.Id}");
-                    return;
-                }
-
                 var dateStr = booking.StartTime.ToString("dd.MM.yyyy");
                 var timeStr = booking.StartTime.ToString("HH:mm");
                 var serviceName = service?.Name ?? "Услуга";
                 var servicePrice = service?.Price.ToString() ?? "0";
                 var trainerName = trainer?.Name ?? "Тренер";
 
-                if (!string.IsNullOrEmpty(user.TelegramUsername))
+                var userRecipient = await ResolveRecipientAsync(
+                    booking.User.Id,
+                    booking.User.TelegramChatId,
+                    booking.User.TelegramUsername);
+
+                if (userRecipient != null)
                 {
                     var userMessage = $"""
-                    ✨ НОВАЯ ЗАПИСЬ! ✨
-                    
+                    Новая запись
+
                     Вы записаны на занятие:
-                    📅 {dateStr}
-                    ⏰ {timeStr}
-                    💃 {serviceName}
-                    👨‍🏫 Тренер: {trainerName}
-                    💰 Стоимость: {servicePrice} ₽
-                    
-                    Ждем вас на паркете! 💪
+                    Дата: {dateStr}
+                    Время: {timeStr}
+                    Услуга: {serviceName}
+                    Тренер: {trainerName}
+                    Стоимость: {servicePrice} ₽
                     """;
 
-                    await SendMessageAsync(user.TelegramUsername, userMessage);
-                }
-                else
-                {
-                    _logger.LogWarning($"Ошибка при отправке сообщения пользователю {user.Id}, проверьте юзернейм");
+                    await SendMessageAsync(userRecipient, userMessage);
                 }
 
-                if (trainer != null && !string.IsNullOrEmpty(trainer.TelegramUsername))
+                if (trainer != null)
                 {
-                    var trainerMessage = $"""
-                    🕺 НОВАЯ ЗАПИСЬ НА ЗАНЯТИЕ!
-                    
-                    👤 Клиент: {user.Name ?? "Клиент"}
-                    📅 {dateStr}
-                    ⏰ {timeStr}
-                    💃 {serviceName}
-                    
-                    Подготовьтесь к занятию!
-                    """;
+                    var trainerRecipient = await ResolveRecipientAsync(
+                        trainer.Id,
+                        trainer.TelegramChatId,
+                        trainer.TelegramUsername);
 
-                    await SendMessageAsync(trainer.TelegramUsername, trainerMessage);
-                }
-                else
-                {
-                    _logger.LogWarning($"Ошибка при отправке сообщения тренеру, проверьте юзернейм {booking.Id}");
+                    if (trainerRecipient != null)
+                    {
+                        var trainerMessage = $"""
+                        Новая запись на занятие
+
+                        Клиент: {booking.User.Name}
+                        Дата: {dateStr}
+                        Время: {timeStr}
+                        Услуга: {serviceName}
+                        """;
+
+                        await SendMessageAsync(trainerRecipient, trainerMessage);
+                    }
                 }
             }
             catch (Exception ex)
@@ -96,19 +130,23 @@ namespace ValikuloDance.Application.Services
             try
             {
                 if (booking?.User == null)
-                {
-                    _logger.LogWarning("Запись или пользователь отсутствуют в базе данных");
                     return;
-                }
+
+                var recipient = await ResolveRecipientAsync(
+                    booking.User.Id,
+                    booking.User.TelegramChatId,
+                    booking.User.TelegramUsername);
+
+                if (recipient == null)
+                    return;
 
                 var message = $"""
-                ⏰ НАПОМИНАНИЕ О ЗАНЯТИИ!
-                
+                Напоминание о занятии
+
                 Сегодня в {booking.StartTime:HH:mm} у вас занятие {booking.Service?.Name} с тренером {booking.Trainer?.User?.Name}.
-                Ждем вас в студии! 🕺
                 """;
 
-                await SendMessageAsync(booking.User.TelegramUsername, message);
+                await SendMessageAsync(recipient, message);
             }
             catch (Exception ex)
             {
@@ -121,75 +159,147 @@ namespace ValikuloDance.Application.Services
             try
             {
                 if (booking?.User == null)
-                {
-                    _logger.LogWarning("Пришла несуществующая запись");
                     return;
-                }
 
-                // Уведомляем пользователя
-                var userMessage = $"""
-                    ❌ ЗАПИСЬ ОТМЕНЕНА
-                
+                var userRecipient = await ResolveRecipientAsync(
+                    booking.User.Id,
+                    booking.User.TelegramChatId,
+                    booking.User.TelegramUsername);
+
+                if (userRecipient != null)
+                {
+                    var userMessage = $"""
+                    Запись отменена
+
                     Занятие {booking.Service?.Name} на {booking.StartTime:dd.MM.yyyy HH:mm} отменено.
-                    Если у вас есть вопросы, свяжитесь с администратором.
                     """;
 
-                await SendMessageAsync(booking.User.TelegramUsername, userMessage);
+                    await SendMessageAsync(userRecipient, userMessage);
+                }
 
-                // Уведомляем тренера
                 if (booking.Trainer?.User != null)
                 {
-                    var trainerMessage = $"""
-                        ❌ ЗАПИСЬ ОТМЕНЕНА КЛИЕНТОМ
-                    
+                    var trainerRecipient = await ResolveRecipientAsync(
+                        booking.Trainer.User.Id,
+                        booking.Trainer.User.TelegramChatId,
+                        booking.Trainer.User.TelegramUsername);
+
+                    if (trainerRecipient != null)
+                    {
+                        var trainerMessage = $"""
+                        Запись отменена клиентом
+
                         Клиент {booking.User.Name} отменил занятие {booking.Service?.Name} на {booking.StartTime:dd.MM.yyyy HH:mm}.
                         """;
 
-                    await SendMessageAsync(booking.Trainer.User.TelegramUsername, trainerMessage);
+                        await SendMessageAsync(trainerRecipient, trainerMessage);
+                    }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending booking cancellation");
+                _logger.LogError(ex, "Ошибка при отправке отмены записи");
             }
         }
 
-        private async Task SendMessageAsync(string username, string message)
+        public async Task UpsertChatBindingAsync(Guid userId, string telegramChatId, string? telegramUsername)
         {
-            if (string.IsNullOrEmpty(username))
+            var normalizedChatId = telegramChatId.Trim();
+            var normalizedUsername = NormalizeUsername(telegramUsername);
+
+            var binding = await _context.TelegramChatBindings
+                .FirstOrDefaultAsync(x => x.UserId == userId && !x.IsDeleted);
+
+            if (binding == null)
             {
-                _logger.LogError($"Невозможно отправить сообщение, потому что заполнен пустой юзернейм");
-                return;
+                binding = new TelegramChatBinding
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    TelegramChatId = normalizedChatId,
+                    TelegramUsername = normalizedUsername,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    LastVerifiedAt = DateTime.UtcNow
+                };
+
+                _context.TelegramChatBindings.Add(binding);
+            }
+            else
+            {
+                binding.TelegramChatId = normalizedChatId;
+                binding.TelegramUsername = normalizedUsername;
+                binding.IsActive = true;
+                binding.IsDeleted = false;
+                binding.LastVerifiedAt = DateTime.UtcNow;
+                binding.UpdatedAt = DateTime.UtcNow;
             }
 
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task<ValikuloDance.Domain.Entities.User?> FindUserByTelegramUsernameAsync(string telegramUsername)
+        {
+            var normalized = NormalizeUsername(telegramUsername);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return null;
+
+            var withAt = "@" + normalized;
+
+            return await _context.Users.FirstOrDefaultAsync(u =>
+                EF.Functions.ILike(u.TelegramUsername, normalized) ||
+                EF.Functions.ILike(u.TelegramUsername, withAt));
+        }
+
+        private async Task SendMessageAsync(TelegramRecipient recipient, string message)
+        {
             try
             {
-                //var cleanUsername = username.StartsWith("@") ? username.Substring(1) : username;
+                var chatId = long.TryParse(recipient.ChatId, out var numericChatId)
+                    ? new ChatId(numericChatId)
+                    : new ChatId(recipient.ChatId);
 
-                var updates = await _botClient.GetUpdates();
+                await _botClient.SendMessage(chatId: chatId, text: message);
 
-                var update = updates.FirstOrDefault(u =>
-                    u.Message?.Chat?.Username?.Equals(username, StringComparison.OrdinalIgnoreCase) == true);
-
-                if (update?.Message?.Chat == null)
-                {
-                    _logger.LogError($"У пользователя нет чата с ботом {username}. Чтобы получать уведомления, надо начать диалог с ботом");
-                    return;
-                }
-                var chat = update.Message.Chat;
-                var chatId = chat.Id;
-
-                await _botClient.SendMessage(
-                    chatId: new ChatId(chatId),
-                    text: message
-                );
-
-                _logger.LogInformation($"Успешно отправлено телеграм-уведомление пользователю {username}");
+                _logger.LogInformation("Telegram message sent to {TelegramRecipient}", recipient.LogValue);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Ошибка при отправке уведомления пользователю {username}");
+                _logger.LogError(ex, "Ошибка при отправке уведомления пользователю {TelegramRecipient}", recipient.LogValue);
             }
         }
+
+        private async Task<TelegramRecipient?> ResolveRecipientAsync(Guid userId, string? fallbackChatId, string? fallbackUsername)
+        {
+            var binding = await _context.TelegramChatBindings
+                .AsNoTracking()
+                .Where(x => x.UserId == userId && x.IsActive && !x.IsDeleted)
+                .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (binding != null)
+            {
+                return new TelegramRecipient(
+                    binding.TelegramChatId,
+                    !string.IsNullOrWhiteSpace(binding.TelegramUsername) ? binding.TelegramUsername : binding.TelegramChatId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(fallbackChatId))
+            {
+                return new TelegramRecipient(fallbackChatId, fallbackUsername ?? fallbackChatId);
+            }
+
+            return null;
+        }
+
+        private static string? NormalizeUsername(string? telegramUsername)
+        {
+            if (string.IsNullOrWhiteSpace(telegramUsername))
+                return null;
+
+            return telegramUsername.Trim().TrimStart('@');
+        }
+
+        private sealed record TelegramRecipient(string ChatId, string LogValue);
     }
 }
