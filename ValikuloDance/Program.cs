@@ -106,6 +106,7 @@ namespace ValikuloDance
             builder.Services.AddScoped<ITokenService, TokenService>();
             builder.Services.AddScoped<ResourceService>();
             builder.Services.AddScoped<ITrainerService, TrainerService>();
+            builder.Services.AddHostedService<TelegramPollingService>();
             builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 
 
