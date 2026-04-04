@@ -1,45 +1,39 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: valikulodance_db
-    environment:
-      POSTGRES_DB: valikulodance
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: sas07291mem
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+  react-app:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dance-frontend
     ports:
-      - "5432:5432"
+      - "80:3000"
+    depends_on:
+      - backend
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d valikulodance"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - valikulo_network
 
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
-    container_name: valikulodance_backend
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Host=postgres;Database=valikulodance;Username=postgres;Password=sas07291mem
+    container_name: dance-backend
     ports:
-      - "8080:8080"
+      - "5000:8080"
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=DanceStudio;Username=postgres;Password=sas07291mem
     depends_on:
-      postgres:
-        condition: service_healthy
+      - db
     restart: unless-stopped
-    networks:
-      - valikulo_network
+
+  db:
+    image: postgres:16
+    container_name: dance-db
+    environment:
+      POSTGRES_DB: dance_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-
-networks:
-  valikulo_network:
-    driver: bridge
