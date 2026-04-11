@@ -5,6 +5,7 @@ namespace ValikuloDance.Application.Interfaces
 {
     public interface ITelegramService
     {
+        Task SendBookingPendingAsync(Booking booking);
         Task SendBookingConfirmationAsync(Booking booking);
         Task SendBookingReminderAsync(Booking booking);
         Task SendBookingCancellationAsync(Booking booking);

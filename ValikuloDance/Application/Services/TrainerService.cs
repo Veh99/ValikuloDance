@@ -76,6 +76,11 @@ namespace ValikuloDance.Application.Services
 
             await _context.Trainers.AddAsync(entity);
             await _context.TrainerWorkingHours.AddRangeAsync(workingHours);
+
+            var user = await _context.Users.FirstAsync(x => x.Id == request.UserId);
+            user.Role = "Trainer";
+            user.UpdatedAt = DateTime.UtcNow;
+
             await _context.SaveChangesAsync();
         }
     }

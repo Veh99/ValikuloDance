@@ -69,7 +69,7 @@ namespace ValikuloDance.Application.Services
                 EndTime = endTimeUtc,
                 CreatedAt = DateTime.UtcNow,
                 Notes = request.Notes,
-                Status = "Confirmed"
+                Status = "Pending"
             };
 
             _context.Bookings.Add(booking);
@@ -90,7 +90,7 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.Service)
                 .FirstAsync(b => b.Id == booking.Id);
 
-            await _telegramService.SendBookingConfirmationAsync(bookingForNotification);
+            await _telegramService.SendBookingPendingAsync(bookingForNotification);
 
             return MapBookingResponse(bookingForNotification);
         }
@@ -182,6 +182,104 @@ namespace ValikuloDance.Application.Services
                 .ToListAsync();
 
             return bookings.Select(MapBookingResponse).ToList();
+        }
+
+        public async Task<List<BookingResponse>> GetTrainerBookingsAsync(ClaimsPrincipal userClaims)
+        {
+            var trainer = await GetTrainerForCurrentUserAsync(userClaims);
+
+            var bookings = await _context.Bookings
+                .Include(b => b.User)
+                .Include(b => b.Trainer).ThenInclude(t => t.User)
+                .Include(b => b.Service)
+                .Where(b => b.TrainerId == trainer.Id)
+                .OrderBy(b => b.StartTime)
+                .ToListAsync();
+
+            return bookings.Select(MapBookingResponse).ToList();
+        }
+
+        public async Task<BookingResponse> ConfirmBookingAsync(Guid bookingId, ClaimsPrincipal userClaims)
+        {
+            var trainer = await GetTrainerForCurrentUserAsync(userClaims);
+
+            var booking = await _context.Bookings
+                .Include(b => b.User)
+                .Include(b => b.Trainer).ThenInclude(t => t.User)
+                .Include(b => b.Service)
+                .FirstOrDefaultAsync(b => b.Id == bookingId && b.TrainerId == trainer.Id)
+                ?? throw new KeyNotFoundException("Запись не найдена");
+
+            if (booking.Status == "Cancelled")
+                throw new InvalidOperationException("Нельзя подтвердить отмененную запись");
+
+            if (booking.Status == "Completed")
+                throw new InvalidOperationException("Занятие уже завершено");
+
+            booking.Status = "Confirmed";
+            booking.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            await _telegramService.SendBookingConfirmationAsync(booking);
+
+            return MapBookingResponse(booking);
+        }
+
+        public async Task<BookingResponse> CancelBookingByTrainerAsync(Guid bookingId, ClaimsPrincipal userClaims)
+        {
+            var trainer = await GetTrainerForCurrentUserAsync(userClaims);
+
+            var booking = await _context.Bookings
+                .Include(b => b.User)
+                .Include(b => b.Trainer).ThenInclude(t => t.User)
+                .Include(b => b.Service)
+                .FirstOrDefaultAsync(b => b.Id == bookingId && b.TrainerId == trainer.Id)
+                ?? throw new KeyNotFoundException("Запись не найдена");
+
+            if (booking.Status == "Cancelled")
+                return MapBookingResponse(booking);
+
+            if (booking.Status == "Completed")
+                throw new InvalidOperationException("Нельзя отменить завершенное занятие");
+
+            booking.Status = "Cancelled";
+            booking.UpdatedAt = DateTime.UtcNow;
+
+            var bookedSlots = await _context.ScheduleSlots
+                .Where(s => s.BookingId == booking.Id)
+                .ToListAsync();
+
+            foreach (var slot in bookedSlots)
+            {
+                slot.BookingId = null;
+                slot.IsBooked = false;
+                slot.IsAvailable = true;
+                slot.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+            await _telegramService.SendBookingCancellationAsync(booking);
+
+            return MapBookingResponse(booking);
+        }
+
+        public async Task<int> CompleteExpiredBookingsAsync()
+        {
+            var expiredBookings = await _context.Bookings
+                .Where(b => b.Status == "Confirmed" && b.EndTime <= DateTime.UtcNow)
+                .ToListAsync();
+
+            if (expiredBookings.Count == 0)
+                return 0;
+
+            foreach (var booking in expiredBookings)
+            {
+                booking.Status = "Completed";
+                booking.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+            return expiredBookings.Count;
         }
 
         public async Task<bool> CancelBookingAsync(Guid bookingId, ClaimsPrincipal userClaims)
@@ -367,11 +465,22 @@ namespace ValikuloDance.Application.Services
                 .FirstOrDefaultAsync(b => b.Id == bookingId && b.UserId == userId);
         }
 
+        private async Task<Trainer> GetTrainerForCurrentUserAsync(ClaimsPrincipal userClaims)
+        {
+            var userId = ExtractUserId(userClaims);
+
+            return await _context.Trainers
+                .Include(t => t.User)
+                .FirstOrDefaultAsync(t => t.UserId == userId && t.IsActive)
+                ?? throw new UnauthorizedAccessException("Только тренер может выполнить это действие");
+        }
+
         private static BookingResponse MapBookingResponse(Booking booking)
         {
             return new BookingResponse
             {
                 Id = booking.Id,
+                UserId = booking.UserId,
                 TrainerId = booking.TrainerId,
                 ServiceId = booking.ServiceId,
                 UserName = booking.User.Name,
@@ -380,7 +489,8 @@ namespace ValikuloDance.Application.Services
                 StartTime = booking.StartTime,
                 EndTime = booking.EndTime,
                 Status = booking.Status,
-                Price = booking.Service.Price
+                Price = booking.Service.Price,
+                Notes = booking.Notes
             };
         }
 

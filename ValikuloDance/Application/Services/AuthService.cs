@@ -53,6 +53,10 @@ namespace ValikuloDance.Application.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
+            var trainer = await _context.Trainers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.UserId == user.Id && t.IsActive);
+
             var token = _tokenService.GenerateToken(user);
             var refreshToken = _tokenService.GenerateRefreshToken();
 
@@ -72,6 +76,8 @@ namespace ValikuloDance.Application.Services
                     Email = user.Email,
                     Role = user.Role,
                     TelegramUsername = user.TelegramUsername,
+                    IsTrainer = trainer != null,
+                    TrainerId = trainer?.Id,
                     CreatedAt = user.CreatedAt,
                     LastLoginAt = user.LastLoginAt
                 }
@@ -95,6 +101,10 @@ namespace ValikuloDance.Application.Services
             // Обновляем время последнего входа
             user.LastLoginAt = DateTime.UtcNow;
 
+            var trainer = await _context.Trainers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.UserId == user.Id && t.IsActive);
+
             // Генерируем токены
             var token = _tokenService.GenerateToken(user);
             var refreshToken = _tokenService.GenerateRefreshToken();
@@ -116,6 +126,8 @@ namespace ValikuloDance.Application.Services
                     Email = user.Email,
                     Role = user.Role,
                     TelegramUsername = user.TelegramUsername,
+                    IsTrainer = trainer != null,
+                    TrainerId = trainer?.Id,
                     CreatedAt = user.CreatedAt,
                     LastLoginAt = user.LastLoginAt
                 }
@@ -136,6 +148,10 @@ namespace ValikuloDance.Application.Services
             var newToken = _tokenService.GenerateToken(user);
             var newRefreshToken = _tokenService.GenerateRefreshToken();
 
+            var trainer = await _context.Trainers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.UserId == user.Id && t.IsActive);
+
             user.RefreshToken = newRefreshToken;
             user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationDays);
             await _context.SaveChangesAsync();
@@ -152,6 +168,8 @@ namespace ValikuloDance.Application.Services
                     Email = user.Email,
                     Role = user.Role,
                     TelegramUsername = user.TelegramUsername,
+                    IsTrainer = trainer != null,
+                    TrainerId = trainer?.Id,
                     CreatedAt = user.CreatedAt,
                     LastLoginAt = user.LastLoginAt
                 }

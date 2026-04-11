@@ -73,6 +73,67 @@ public class BookingController : ControllerBase
     }
 
     [Authorize]
+    [HttpGet("trainer-bookings")]
+    public async Task<IActionResult> GetTrainerBookings()
+    {
+        try
+        {
+            var bookings = await _bookingService.GetTrainerBookingsAsync(User);
+            return Ok(bookings);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
+    [HttpPost("{bookingId}/confirm")]
+    public async Task<IActionResult> ConfirmBooking(Guid bookingId)
+    {
+        try
+        {
+            var booking = await _bookingService.ConfirmBookingAsync(bookingId, User);
+            return Ok(booking);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
+    [HttpPost("{bookingId}/trainer-cancel")]
+    public async Task<IActionResult> CancelBookingByTrainer(Guid bookingId)
+    {
+        try
+        {
+            var booking = await _bookingService.CancelBookingByTrainerAsync(bookingId, User);
+            return Ok(booking);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
     [HttpDelete("{bookingId}")]
     public async Task<IActionResult> CancelBooking(Guid bookingId)
     {

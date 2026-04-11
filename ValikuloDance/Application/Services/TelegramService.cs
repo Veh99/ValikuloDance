@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.ReplyMarkups;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
 using ValikuloDance.Infrastructure.Data;
@@ -23,6 +24,12 @@ namespace ValikuloDance.Application.Services
 
         public async Task HandleUpdateAsync(Update update)
         {
+            if (update.CallbackQuery != null)
+            {
+                await HandleCallbackQueryAsync(update.CallbackQuery);
+                return;
+            }
+
             var message = update.Message;
             if (message?.Chat == null)
                 return;
@@ -58,23 +65,19 @@ namespace ValikuloDance.Application.Services
             }
         }
 
-        public async Task SendBookingConfirmationAsync(Booking booking)
+        public async Task SendBookingPendingAsync(Booking booking)
         {
             try
             {
                 if (booking?.User == null)
-                {
-                    _logger.LogWarning("Booking or user is null for confirmation");
                     return;
-                }
 
-                var trainer = booking.Trainer?.User;
-                var service = booking.Service;
-                var dateStr = booking.StartTime.ToString("dd.MM.yyyy");
-                var timeStr = booking.StartTime.ToString("HH:mm");
-                var serviceName = service?.Name ?? "Услуга";
-                var servicePrice = service?.Price.ToString() ?? "0";
-                var trainerName = trainer?.Name ?? "Тренер";
+                var localStartTime = ConvertToMoscowTime(booking.StartTime);
+                var dateStr = localStartTime.ToString("dd.MM.yyyy");
+                var timeStr = localStartTime.ToString("HH:mm");
+                var trainerName = booking.Trainer?.User?.Name ?? "Тренер";
+                var serviceName = booking.Service?.Name ?? "Услуга";
+                var servicePrice = booking.Service?.Price.ToString() ?? "0";
 
                 var userRecipient = await ResolveRecipientAsync(
                     booking.User.Id,
@@ -86,37 +89,90 @@ namespace ValikuloDance.Application.Services
                     var userMessage = $"""
                     Новая запись
 
-                    Вы записаны на занятие:
+                    Ваша запись создана и ожидает подтверждения тренером:
                     Дата: {dateStr}
                     Время: {timeStr}
                     Услуга: {serviceName}
                     Тренер: {trainerName}
                     Стоимость: {servicePrice} ₽
+                    Статус: Ожидает подтверждения
                     """;
 
                     await SendMessageAsync(userRecipient, userMessage);
                 }
 
-                if (trainer != null)
+                if (booking.Trainer?.User != null)
                 {
                     var trainerRecipient = await ResolveRecipientAsync(
-                        trainer.Id,
-                        trainer.TelegramChatId,
-                        trainer.TelegramUsername);
+                        booking.Trainer.User.Id,
+                        booking.Trainer.User.TelegramChatId,
+                        booking.Trainer.User.TelegramUsername);
 
                     if (trainerRecipient != null)
                     {
                         var trainerMessage = $"""
-                        Новая запись на занятие
+                        Новая заявка на занятие
 
                         Клиент: {booking.User.Name}
                         Дата: {dateStr}
                         Время: {timeStr}
                         Услуга: {serviceName}
+                        Статус: Ожидает вашего решения
                         """;
 
-                        await SendMessageAsync(trainerRecipient, trainerMessage);
+                        var keyboard = new InlineKeyboardMarkup(new[]
+                        {
+                            new[]
+                            {
+                                InlineKeyboardButton.WithCallbackData("Подтвердить", $"booking:confirm:{booking.Id}"),
+                                InlineKeyboardButton.WithCallbackData("Отменить", $"booking:cancel:{booking.Id}")
+                            }
+                        });
+
+                        await SendMessageAsync(trainerRecipient, trainerMessage, keyboard);
                     }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при отправке уведомления о новой заявке {BookingId}", booking?.Id);
+            }
+        }
+
+        public async Task SendBookingConfirmationAsync(Booking booking)
+        {
+            try
+            {
+                if (booking?.User == null)
+                    return;
+
+                var localStartTime = ConvertToMoscowTime(booking.StartTime);
+                var dateStr = localStartTime.ToString("dd.MM.yyyy");
+                var timeStr = localStartTime.ToString("HH:mm");
+                var trainerName = booking.Trainer?.User?.Name ?? "Тренер";
+                var serviceName = booking.Service?.Name ?? "Услуга";
+                var servicePrice = booking.Service?.Price.ToString() ?? "0";
+
+                var userRecipient = await ResolveRecipientAsync(
+                    booking.User.Id,
+                    booking.User.TelegramChatId,
+                    booking.User.TelegramUsername);
+
+                if (userRecipient != null)
+                {
+                    var userMessage = $"""
+                    Запись подтверждена
+
+                    Ваше занятие подтверждено:
+                    Дата: {dateStr}
+                    Время: {timeStr}
+                    Услуга: {serviceName}
+                    Тренер: {trainerName}
+                    Стоимость: {servicePrice} ₽
+                    Статус: Подтверждено
+                    """;
+
+                    await SendMessageAsync(userRecipient, userMessage);
                 }
             }
             catch (Exception ex)
@@ -140,10 +196,11 @@ namespace ValikuloDance.Application.Services
                 if (recipient == null)
                     return;
 
+                var localStartTime = ConvertToMoscowTime(booking.StartTime);
                 var message = $"""
                 Напоминание о занятии
 
-                Сегодня в {booking.StartTime:HH:mm} у вас занятие {booking.Service?.Name} с тренером {booking.Trainer?.User?.Name}.
+                Сегодня в {localStartTime:HH:mm} у вас занятие {booking.Service?.Name} с тренером {booking.Trainer?.User?.Name}.
                 """;
 
                 await SendMessageAsync(recipient, message);
@@ -166,12 +223,15 @@ namespace ValikuloDance.Application.Services
                     booking.User.TelegramChatId,
                     booking.User.TelegramUsername);
 
+                var localStartTime = ConvertToMoscowTime(booking.StartTime);
+
                 if (userRecipient != null)
                 {
                     var userMessage = $"""
                     Запись отменена
 
-                    Занятие {booking.Service?.Name} на {booking.StartTime:dd.MM.yyyy HH:mm} отменено.
+                    Занятие {booking.Service?.Name} на {localStartTime:dd.MM.yyyy HH:mm} отменено.
+                    Статус: Отменено
                     """;
 
                     await SendMessageAsync(userRecipient, userMessage);
@@ -187,9 +247,9 @@ namespace ValikuloDance.Application.Services
                     if (trainerRecipient != null)
                     {
                         var trainerMessage = $"""
-                        Запись отменена клиентом
+                        Запись отменена
 
-                        Клиент {booking.User.Name} отменил занятие {booking.Service?.Name} на {booking.StartTime:dd.MM.yyyy HH:mm}.
+                        Клиент {booking.User.Name} отменил занятие {booking.Service?.Name} на {localStartTime:dd.MM.yyyy HH:mm}.
                         """;
 
                         await SendMessageAsync(trainerRecipient, trainerMessage);
@@ -238,6 +298,122 @@ namespace ValikuloDance.Application.Services
             await _context.SaveChangesAsync();
         }
 
+        private async Task HandleCallbackQueryAsync(CallbackQuery callbackQuery)
+        {
+            if (string.IsNullOrWhiteSpace(callbackQuery.Data))
+                return;
+
+            var parts = callbackQuery.Data.Split(':', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 3 || parts[0] != "booking" || !Guid.TryParse(parts[2], out var bookingId))
+                return;
+
+            var action = parts[1];
+            var chatId = callbackQuery.Message?.Chat.Id.ToString();
+
+            if (string.IsNullOrWhiteSpace(chatId))
+                return;
+
+            var binding = await _context.TelegramChatBindings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.TelegramChatId == chatId && x.IsActive && !x.IsDeleted);
+
+            if (binding == null)
+            {
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Сначала привяжите Telegram через /start.");
+                return;
+            }
+
+            var trainer = await _context.Trainers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.UserId == binding.UserId && t.IsActive);
+
+            if (trainer == null)
+            {
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Это действие доступно только тренеру.");
+                return;
+            }
+
+            var booking = await _context.Bookings
+                .Include(b => b.User)
+                .Include(b => b.Trainer).ThenInclude(t => t.User)
+                .Include(b => b.Service)
+                .FirstOrDefaultAsync(b => b.Id == bookingId && b.TrainerId == trainer.Id);
+
+            if (booking == null)
+            {
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Запись не найдена.");
+                return;
+            }
+
+            if (booking.Status == "Completed")
+            {
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Занятие уже завершено.");
+                return;
+            }
+
+            if (booking.Status == "Cancelled")
+            {
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Запись уже отменена.");
+                return;
+            }
+
+            if (action == "confirm")
+            {
+                booking.Status = "Confirmed";
+                booking.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                await SendBookingConfirmationAsync(booking);
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Запись подтверждена.");
+            }
+            else if (action == "cancel")
+            {
+                booking.Status = "Cancelled";
+                booking.UpdatedAt = DateTime.UtcNow;
+
+                var bookedSlots = await _context.ScheduleSlots
+                    .Where(s => s.BookingId == booking.Id)
+                    .ToListAsync();
+
+                foreach (var slot in bookedSlots)
+                {
+                    slot.BookingId = null;
+                    slot.IsBooked = false;
+                    slot.IsAvailable = true;
+                    slot.UpdatedAt = DateTime.UtcNow;
+                }
+
+                await _context.SaveChangesAsync();
+                await SendBookingCancellationAsync(booking);
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Запись отменена.");
+            }
+
+            if (callbackQuery.Message != null)
+            {
+                var localStartTime = ConvertToMoscowTime(booking.StartTime);
+                var statusText = booking.Status switch
+                {
+                    "Confirmed" => "Подтверждено",
+                    "Cancelled" => "Отменено",
+                    _ => "Ожидает подтверждения"
+                };
+
+                var updatedText = $"""
+                Заявка на занятие
+
+                Клиент: {booking.User.Name}
+                Дата: {localStartTime:dd.MM.yyyy}
+                Время: {localStartTime:HH:mm}
+                Услуга: {booking.Service?.Name}
+                Статус: {statusText}
+                """;
+
+                await _botClient.EditMessageText(
+                    chatId: callbackQuery.Message.Chat.Id,
+                    messageId: callbackQuery.Message.MessageId,
+                    text: updatedText);
+            }
+        }
+
         private async Task<ValikuloDance.Domain.Entities.User?> FindUserByTelegramUsernameAsync(string telegramUsername)
         {
             var normalized = NormalizeUsername(telegramUsername);
@@ -251,7 +427,7 @@ namespace ValikuloDance.Application.Services
                 EF.Functions.ILike(u.TelegramUsername, withAt));
         }
 
-        private async Task SendMessageAsync(TelegramRecipient recipient, string message)
+        private async Task SendMessageAsync(TelegramRecipient recipient, string message, InlineKeyboardMarkup? replyMarkup = null)
         {
             try
             {
@@ -259,7 +435,7 @@ namespace ValikuloDance.Application.Services
                     ? new ChatId(numericChatId)
                     : new ChatId(recipient.ChatId);
 
-                await _botClient.SendMessage(chatId: chatId, text: message);
+                await _botClient.SendMessage(chatId: chatId, text: message, replyMarkup: replyMarkup);
 
                 _logger.LogInformation("Telegram message sent to {TelegramRecipient}", recipient.LogValue);
             }
@@ -298,6 +474,27 @@ namespace ValikuloDance.Application.Services
                 return null;
 
             return telegramUsername.Trim().TrimStart('@');
+        }
+
+        private static DateTime ConvertToMoscowTime(DateTime utcDateTime)
+        {
+            var normalizedUtc = utcDateTime.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc)
+                : utcDateTime.ToUniversalTime();
+
+            return TimeZoneInfo.ConvertTimeFromUtc(normalizedUtc, GetMoscowTimeZone());
+        }
+
+        private static TimeZoneInfo GetMoscowTimeZone()
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Europe/Moscow");
+            }
         }
 
         private sealed record TelegramRecipient(string ChatId, string LogValue);
