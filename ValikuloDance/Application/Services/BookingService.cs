@@ -114,17 +114,19 @@ namespace ValikuloDance.Application.Services
 
             var slots = new List<AvailableSlotResponse>();
 
-            var utcDate = date.Kind == DateTimeKind.Unspecified
-                ? DateTime.SpecifyKind(date.Date, DateTimeKind.Utc)
-                : date.Date.ToUniversalTime();
-
             var timeZone = GetMoscowTimeZone();
+            var localDate = date.Kind switch
+            {
+                DateTimeKind.Utc => TimeZoneInfo.ConvertTimeFromUtc(date, timeZone).Date,
+                DateTimeKind.Local => date.ToLocalTime().Date,
+                _ => date.Date
+            };
             var startHour = 9;
             var endHour = 21;
 
             for (var hour = startHour; hour < endHour; hour++)
             {
-                var localStartTime = new DateTime(utcDate.Year, utcDate.Month, utcDate.Day, hour, 0, 0);
+                var localStartTime = new DateTime(localDate.Year, localDate.Month, localDate.Day, hour, 0, 0, DateTimeKind.Unspecified);
                 var localEndTime = localStartTime.AddHours(1);
 
                 var startTimeUtc = TimeZoneInfo.ConvertTimeToUtc(localStartTime, timeZone);
