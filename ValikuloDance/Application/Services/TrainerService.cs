@@ -50,7 +50,32 @@ namespace ValikuloDance.Application.Services
                 PhotoUrl = request.PhotoUrl ?? string.Empty,
             };
 
+            var workingHours = request.WorkingHours.Count > 0
+                ? request.WorkingHours.Select(hours => new TrainerWorkingHour
+                {
+                    Id = Guid.NewGuid(),
+                    TrainerId = entity.Id,
+                    DayOfWeek = hours.DayOfWeek,
+                    StartTimeLocal = TimeSpan.Parse(hours.StartTimeLocal),
+                    EndTimeLocal = TimeSpan.Parse(hours.EndTimeLocal),
+                    SlotDurationMinutes = hours.SlotDurationMinutes,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                }).ToList()
+                : Enumerable.Range(1, 6).Select(day => new TrainerWorkingHour
+                {
+                    Id = Guid.NewGuid(),
+                    TrainerId = entity.Id,
+                    DayOfWeek = (DayOfWeek)day,
+                    StartTimeLocal = new TimeSpan(9, 0, 0),
+                    EndTimeLocal = new TimeSpan(21, 0, 0),
+                    SlotDurationMinutes = 15,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                }).ToList();
+
             await _context.Trainers.AddAsync(entity);
+            await _context.TrainerWorkingHours.AddRangeAsync(workingHours);
             await _context.SaveChangesAsync();
         }
     }

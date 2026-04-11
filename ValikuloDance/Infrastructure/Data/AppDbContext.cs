@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using ValikuloDance.Domain.Entities;
 
 namespace ValikuloDance.Infrastructure.Data
@@ -7,7 +7,6 @@ namespace ValikuloDance.Infrastructure.Data
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
-
         }
 
         public DbSet<User> Users { get; set; }
@@ -17,17 +16,16 @@ namespace ValikuloDance.Infrastructure.Data
         public DbSet<Subscription> Subscriptions { get; set; }
         public DbSet<ScheduleSlot> ScheduleSlots { get; set; }
         public DbSet<TelegramChatBinding> TelegramChatBindings { get; set; }
+        public DbSet<TrainerWorkingHour> TrainerWorkingHours { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // User
             modelBuilder.Entity<User>(entity =>
             {
                 entity.HasKey(e => e.Id);
 
-                // Индексы с правильным синтаксисом для PostgreSQL
                 entity.HasIndex(e => e.Email)
                     .IsUnique()
                     .HasFilter("\"Email\" IS NOT NULL");
@@ -40,7 +38,6 @@ namespace ValikuloDance.Infrastructure.Data
 
                 entity.HasIndex(e => e.Role);
 
-                // Свойства
                 entity.Property(e => e.Name)
                     .IsRequired()
                     .HasMaxLength(100);
@@ -63,7 +60,6 @@ namespace ValikuloDance.Infrastructure.Data
                     .HasMaxLength(20)
                     .HasDefaultValue("Client");
 
-                // Поля аутентификации
                 entity.Property(e => e.PasswordHash)
                     .IsRequired()
                     .HasMaxLength(255);
@@ -71,27 +67,21 @@ namespace ValikuloDance.Infrastructure.Data
                 entity.Property(e => e.RefreshToken)
                     .HasMaxLength(500);
 
-                entity.Property(e => e.RefreshTokenExpiryTime);
-
-                // Базовые поля
-                entity.Property(e => e.LastLoginAt);
-
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                entity.Property(e => e.UpdatedAt);
 
                 entity.Property(e => e.IsDeleted)
                     .HasDefaultValue(false);
             });
 
-            // Trainer
             modelBuilder.Entity<Trainer>(entity =>
             {
                 entity.HasKey(e => e.Id);
+
                 entity.HasOne(e => e.User)
                     .WithOne()
-                    .OnDelete(DeleteBehavior.SetNull);
+                    .HasForeignKey<Trainer>(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 entity.Property(e => e.Bio).HasMaxLength(1000);
                 entity.Property(e => e.PhotoUrl).HasMaxLength(500);
@@ -100,13 +90,24 @@ namespace ValikuloDance.Infrastructure.Data
                 entity.Property(e => e.DanceStyles)
                     .HasConversion(
                         v => string.Join(',', v),
-                        v => v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
-                    )
+                        v => v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList())
                     .HasColumnName("DanceStyles")
                     .HasColumnType("text");
             });
 
-            // Service
+            modelBuilder.Entity<TrainerWorkingHour>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Trainer)
+                    .WithMany(t => t.WorkingHours)
+                    .HasForeignKey(e => e.TrainerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => new { e.TrainerId, e.DayOfWeek, e.StartTimeLocal, e.EndTimeLocal })
+                    .IsUnique();
+            });
+
             modelBuilder.Entity<Service>(entity =>
             {
                 entity.HasKey(e => e.Id);
@@ -115,25 +116,29 @@ namespace ValikuloDance.Infrastructure.Data
                 entity.Property(e => e.Price).HasPrecision(10, 2);
             });
 
-            // Booking
             modelBuilder.Entity<Booking>(entity =>
             {
                 entity.HasKey(e => e.Id);
+
                 entity.HasOne(e => e.User)
                     .WithMany(u => u.Bookings)
-                    .HasForeignKey(e => e.UserId);
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
                 entity.HasOne(e => e.Trainer)
                     .WithMany(t => t.Bookings)
-                    .HasForeignKey(e => e.TrainerId);
+                    .HasForeignKey(e => e.TrainerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
                 entity.HasOne(e => e.Service)
                     .WithMany()
-                    .HasForeignKey(e => e.ServiceId);
+                    .HasForeignKey(e => e.ServiceId)
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(e => e.StartTime);
                 entity.HasIndex(e => e.Status);
             });
 
-            // Subscription
             modelBuilder.Entity<Subscription>(entity =>
             {
                 entity.HasKey(e => e.Id);
@@ -148,16 +153,19 @@ namespace ValikuloDance.Infrastructure.Data
             modelBuilder.Entity<ScheduleSlot>(entity =>
             {
                 entity.HasKey(e => e.Id);
+
                 entity.HasOne(e => e.Trainer)
                     .WithMany(t => t.ScheduleSlots)
-                    .HasForeignKey(e => e.TrainerId);
+                    .HasForeignKey(e => e.TrainerId)
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasOne(e => e.Booking)
-                    .WithOne()
-                    .HasForeignKey<ScheduleSlot>(e => e.Id)
+                    .WithMany(b => b.ScheduleSlots)
+                    .HasForeignKey(e => e.BookingId)
                     .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasIndex(e => new { e.TrainerId, e.StartTime }).IsUnique();
+                entity.HasIndex(e => new { e.TrainerId, e.StartTime, e.IsBooked });
             });
 
             modelBuilder.Entity<TelegramChatBinding>(entity =>

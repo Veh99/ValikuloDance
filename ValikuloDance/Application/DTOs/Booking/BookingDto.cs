@@ -8,9 +8,17 @@
         public string? Notes { get; set; }
     }
 
+    public class AvailableDateResponse
+    {
+        public required DateTime Date { get; set; }
+        public required int AvailableSlotCount { get; set; }
+    }
+
     public class BookingResponse
     {
         public required Guid Id { get; set; }
+        public required Guid TrainerId { get; set; }
+        public required Guid ServiceId { get; set; }
         public required string UserName { get; set; }
         public required string TrainerName { get; set; }
         public required string ServiceName { get; set; }

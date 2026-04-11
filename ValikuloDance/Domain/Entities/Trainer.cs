@@ -15,5 +15,6 @@
         public virtual User? User { get; set; }
         public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
         public virtual ICollection<ScheduleSlot> ScheduleSlots { get; set; } = new List<ScheduleSlot>();
+        public virtual ICollection<TrainerWorkingHour> WorkingHours { get; set; } = new List<TrainerWorkingHour>();
     }
 }

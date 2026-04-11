@@ -25,6 +25,7 @@ public class TrainerController : ControllerBase
     {
         var trainers = await _context.Trainers
             .Include(t => t.User)
+            .Include(t => t.WorkingHours.Where(w => w.IsActive))
             .Where(t => t.IsActive)
             .Select(t => new
             {
@@ -35,7 +36,14 @@ public class TrainerController : ControllerBase
                 t.ExperienceYears,
                 t.DanceStyles,
                 t.Instagram,
-                t.User.TelegramUsername
+                t.User.TelegramUsername,
+                WorkingHours = t.WorkingHours.Select(w => new
+                {
+                    w.DayOfWeek,
+                    w.StartTimeLocal,
+                    w.EndTimeLocal,
+                    w.SlotDurationMinutes
+                })
             })
             .ToListAsync();
 
@@ -47,6 +55,7 @@ public class TrainerController : ControllerBase
     {
         var trainer = await _context.Trainers
             .Include(t => t.User)
+            .Include(t => t.WorkingHours.Where(w => w.IsActive))
             .FirstOrDefaultAsync(t => t.Id == id && t.IsActive);
 
         if (trainer == null)
@@ -61,7 +70,14 @@ public class TrainerController : ControllerBase
             trainer.ExperienceYears,
             trainer.DanceStyles,
             trainer.Instagram,
-            trainer.User.TelegramUsername
+            trainer.User.TelegramUsername,
+            WorkingHours = trainer.WorkingHours.Select(w => new
+            {
+                w.DayOfWeek,
+                w.StartTimeLocal,
+                w.EndTimeLocal,
+                w.SlotDurationMinutes
+            })
         });
     }
 

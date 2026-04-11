@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ValikuloDance.Application.DTOs.Booking;
 using ValikuloDance.Application.Services;
@@ -50,10 +50,17 @@ public class BookingController : ControllerBase
         }
     }
 
-    [HttpGet("available-slots/{trainerId}")]
-    public async Task<IActionResult> GetAvailableSlots(Guid trainerId, [FromQuery] DateTime date)
+    [HttpGet("available-dates/{trainerId}")]
+    public async Task<IActionResult> GetAvailableDates(Guid trainerId, [FromQuery] Guid serviceId, [FromQuery] int days = 14)
     {
-        var slots = await _bookingService.GetAvailableSlotsAsync(trainerId, date);
+        var dates = await _bookingService.GetAvailableDatesAsync(trainerId, serviceId, days);
+        return Ok(dates);
+    }
+
+    [HttpGet("available-slots/{trainerId}")]
+    public async Task<IActionResult> GetAvailableSlots(Guid trainerId, [FromQuery] Guid serviceId, [FromQuery] DateTime date)
+    {
+        var slots = await _bookingService.GetAvailableSlotsAsync(trainerId, serviceId, date);
         return Ok(slots);
     }
 
@@ -64,12 +71,6 @@ public class BookingController : ControllerBase
         var bookings = await _bookingService.GetUserBookingsAsync(User);
         return Ok(bookings);
     }
-
-    //[HttpPost("confirm-booking")]
-    //public async Task<IActionResult> ConfirmBooking(Guid bookingId, [FromQuery])
-    //{
-    //    var booking = await _bookingService
-    //}
 
     [Authorize]
     [HttpDelete("{bookingId}")]

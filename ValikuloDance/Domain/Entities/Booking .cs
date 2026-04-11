@@ -15,5 +15,6 @@
         public virtual User User { get; set; }
         public virtual Trainer Trainer { get; set; }
         public virtual Service Service { get; set; }
+        public virtual ICollection<ScheduleSlot> ScheduleSlots { get; set; } = new List<ScheduleSlot>();
     }
 }
