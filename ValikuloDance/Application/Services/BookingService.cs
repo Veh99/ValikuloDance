@@ -52,12 +52,17 @@ namespace ValikuloDance.Application.Services
             if (startTimeUtc < DateTime.UtcNow)
                 throw new InvalidOperationException("Нельзя создать запись на прошедшее время");
 
+            if (startTimeUtc < DateTime.UtcNow.AddHours(3))
+                throw new InvalidOperationException("Запись возможна только не позднее чем за 3 часа до начала занятия");
+
             var endTimeUtc = startTimeUtc.AddMinutes(service.DurationMinutes);
             await EnsureSlotsGeneratedAsync(trainer, startTimeUtc.Date, startTimeUtc.Date);
 
             var slotsToBook = await GetBookableSlotsAsync(trainer.Id, startTimeUtc, endTimeUtc);
             if (slotsToBook.Count == 0)
                 throw new InvalidOperationException("Выбранное время недоступно");
+
+            var bookingPrice = user.HasLateCancellationPenalty ? service.Price * 2 : service.Price;
 
             var booking = new Booking
             {
@@ -69,10 +74,17 @@ namespace ValikuloDance.Application.Services
                 EndTime = endTimeUtc,
                 CreatedAt = DateTime.UtcNow,
                 Notes = request.Notes,
-                Status = "Pending"
+                Status = "Pending",
+                PriceAtBooking = bookingPrice
             };
 
             _context.Bookings.Add(booking);
+
+            if (user.HasLateCancellationPenalty)
+            {
+                user.HasLateCancellationPenalty = false;
+                user.UpdatedAt = DateTime.UtcNow;
+            }
 
             foreach (var slot in slotsToBook)
             {
@@ -84,14 +96,10 @@ namespace ValikuloDance.Application.Services
 
             await _context.SaveChangesAsync();
 
-            var bookingForNotification = await _context.Bookings
-                .Include(b => b.User)
-                .Include(b => b.Trainer).ThenInclude(t => t.User)
-                .Include(b => b.Service)
-                .FirstAsync(b => b.Id == booking.Id);
+            var bookingForNotification = await LoadBookingAsync(booking.Id)
+                ?? throw new KeyNotFoundException("Запись не найдена после создания");
 
             await _telegramService.SendBookingPendingAsync(bookingForNotification);
-
             return MapBookingResponse(bookingForNotification);
         }
 
@@ -120,6 +128,7 @@ namespace ValikuloDance.Application.Services
                 TimeZoneInfo.ConvertTimeToUtc(endDateLocal, timeZone).Date);
 
             var result = new List<AvailableDateResponse>();
+
             for (var localDate = todayLocal; localDate <= endDateLocal; localDate = localDate.AddDays(1))
             {
                 var startTimes = await GetAvailableStartTimesForDateAsync(trainer.Id, localDate, service.DurationMinutes);
@@ -290,11 +299,20 @@ namespace ValikuloDance.Application.Services
             if (booking == null)
                 return false;
 
-            if (booking.StartTime < DateTime.UtcNow.AddHours(2))
-                throw new InvalidOperationException("Отмена возможна не позднее чем за 2 часа до занятия");
+            if (booking.Status == "Cancelled")
+                return true;
+
+            if (booking.Status == "Completed")
+                throw new InvalidOperationException("Нельзя отменить завершенное занятие");
 
             booking.Status = "Cancelled";
             booking.UpdatedAt = DateTime.UtcNow;
+
+            if (booking.StartTime < DateTime.UtcNow.AddHours(3))
+            {
+                booking.User.HasLateCancellationPenalty = true;
+                booking.User.UpdatedAt = DateTime.UtcNow;
+            }
 
             var bookedSlots = await _context.ScheduleSlots
                 .Where(s => s.BookingId == booking.Id)
@@ -309,7 +327,6 @@ namespace ValikuloDance.Application.Services
             }
 
             await _context.SaveChangesAsync();
-
             await _telegramService.SendBookingCancellationAsync(booking);
             return true;
         }
@@ -319,6 +336,7 @@ namespace ValikuloDance.Application.Services
             var timeZone = GetMoscowTimeZone();
             var dayStartUtc = TimeZoneInfo.ConvertTimeToUtc(localDate, timeZone);
             var nextDayStartUtc = TimeZoneInfo.ConvertTimeToUtc(localDate.AddDays(1), timeZone);
+            var bookingDeadlineUtc = DateTime.UtcNow.AddHours(3);
 
             var slots = await _context.ScheduleSlots
                 .Where(s => s.TrainerId == trainerId && s.StartTime >= dayStartUtc && s.StartTime < nextDayStartUtc)
@@ -329,8 +347,12 @@ namespace ValikuloDance.Application.Services
                 return new List<DateTime>();
 
             var availableStarts = new List<DateTime>();
+
             foreach (var slot in slots.Where(IsSlotFree))
             {
+                if (slot.StartTime < bookingDeadlineUtc)
+                    continue;
+
                 var requestedEnd = slot.StartTime.AddMinutes(durationMinutes);
                 var candidateSlots = slots
                     .Where(s => s.StartTime >= slot.StartTime && s.StartTime < requestedEnd)
@@ -465,6 +487,15 @@ namespace ValikuloDance.Application.Services
                 .FirstOrDefaultAsync(b => b.Id == bookingId && b.UserId == userId);
         }
 
+        private async Task<Booking?> LoadBookingAsync(Guid bookingId)
+        {
+            return await _context.Bookings
+                .Include(b => b.User)
+                .Include(b => b.Trainer).ThenInclude(t => t.User)
+                .Include(b => b.Service)
+                .FirstOrDefaultAsync(b => b.Id == bookingId);
+        }
+
         private async Task<Trainer> GetTrainerForCurrentUserAsync(ClaimsPrincipal userClaims)
         {
             var userId = ExtractUserId(userClaims);
@@ -489,7 +520,7 @@ namespace ValikuloDance.Application.Services
                 StartTime = booking.StartTime,
                 EndTime = booking.EndTime,
                 Status = booking.Status,
-                Price = booking.Service.Price,
+                Price = booking.PriceAtBooking > 0 ? booking.PriceAtBooking : booking.Service.Price,
                 Notes = booking.Notes
             };
         }

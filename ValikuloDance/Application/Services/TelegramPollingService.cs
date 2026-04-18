@@ -1,4 +1,5 @@
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using ValikuloDance.Application.Interfaces;
 
@@ -65,6 +66,12 @@ namespace ValikuloDance.Application.Services
                 catch (OperationCanceledException)
                 {
                     break;
+                }
+                catch (ApiRequestException ex) when (ex.ErrorCode == 409)
+                {
+                    _logger.LogWarning(
+                        "Telegram polling paused because another bot instance is already using getUpdates. Retrying in 30 seconds.");
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                 }
                 catch (Exception ex)
                 {

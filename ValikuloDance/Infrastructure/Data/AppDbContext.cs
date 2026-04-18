@@ -30,7 +30,9 @@ namespace ValikuloDance.Infrastructure.Data
                     .IsUnique()
                     .HasFilter("\"Email\" IS NOT NULL");
 
-                entity.HasIndex(e => e.Phone).IsUnique();
+                entity.HasIndex(e => e.Phone)
+                    .IsUnique()
+                    .HasFilter("\"Phone\" IS NOT NULL");
 
                 entity.HasIndex(e => e.TelegramChatId)
                     .IsUnique()
@@ -46,7 +48,6 @@ namespace ValikuloDance.Infrastructure.Data
                     .HasMaxLength(100);
 
                 entity.Property(e => e.Phone)
-                    .IsRequired()
                     .HasMaxLength(20);
 
                 entity.Property(e => e.TelegramUsername)
@@ -66,6 +67,9 @@ namespace ValikuloDance.Infrastructure.Data
 
                 entity.Property(e => e.RefreshToken)
                     .HasMaxLength(500);
+
+                entity.Property(e => e.HasLateCancellationPenalty)
+                    .HasDefaultValue(false);
 
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
@@ -137,6 +141,9 @@ namespace ValikuloDance.Infrastructure.Data
 
                 entity.HasIndex(e => e.StartTime);
                 entity.HasIndex(e => e.Status);
+
+                entity.Property(e => e.PriceAtBooking)
+                    .HasPrecision(10, 2);
             });
 
             modelBuilder.Entity<Subscription>(entity =>

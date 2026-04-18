@@ -9,6 +9,7 @@
         public DateTime EndTime { get; set; }
         public string Status { get; set; } = "Pending"; // Pending, Confirmed, Completed, Cancelled
         public bool PaidOnSite { get; set; }
+        public decimal PriceAtBooking { get; set; }
         public string? Notes { get; set; }
 
         // Навигационные свойства

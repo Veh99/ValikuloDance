@@ -3,8 +3,8 @@
     public class User : BaseEntity
     {
 
-        public required string Email { get; set; }
-        public required string Phone { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
         public required string Name { get; set; }
         public required string TelegramChatId { get; set; }
         public required string TelegramUsername { get; set; }
@@ -15,6 +15,7 @@
         public string PasswordHash { get; set; } = string.Empty;
         public string? RefreshToken { get; set; }
         public DateTime? RefreshTokenExpiryTime { get; set; }
+        public bool HasLateCancellationPenalty { get; set; }
 
         // Навигационные свойства
         public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();

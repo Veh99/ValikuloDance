@@ -77,7 +77,7 @@ namespace ValikuloDance.Application.Services
                 var timeStr = localStartTime.ToString("HH:mm");
                 var trainerName = booking.Trainer?.User?.Name ?? "Тренер";
                 var serviceName = booking.Service?.Name ?? "Услуга";
-                var servicePrice = booking.Service?.Price.ToString() ?? "0";
+                var servicePrice = (booking.PriceAtBooking > 0 ? booking.PriceAtBooking : booking.Service?.Price ?? 0).ToString("0.##");
 
                 var userRecipient = await ResolveRecipientAsync(
                     booking.User.Id,
@@ -151,7 +151,7 @@ namespace ValikuloDance.Application.Services
                 var timeStr = localStartTime.ToString("HH:mm");
                 var trainerName = booking.Trainer?.User?.Name ?? "Тренер";
                 var serviceName = booking.Service?.Name ?? "Услуга";
-                var servicePrice = booking.Service?.Price.ToString() ?? "0";
+                var servicePrice = (booking.PriceAtBooking > 0 ? booking.PriceAtBooking : booking.Service?.Price ?? 0).ToString("0.##");
 
                 var userRecipient = await ResolveRecipientAsync(
                     booking.User.Id,

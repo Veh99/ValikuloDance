@@ -8,10 +8,6 @@ namespace ValikuloDance.Application.DTOs.Auth
         [StringLength(100, MinimumLength = 2, ErrorMessage = "Имя должно содержать от 2 до 100 символов")]
         public required string Name { get; set; }
 
-        [Required(ErrorMessage = "Телефон обязателен")]
-        [Phone(ErrorMessage = "Неверный формат телефона")]
-        public required string Phone { get; set; }
-
         [EmailAddress(ErrorMessage = "Неверный формат email")]
         public required string? Email { get; set; }
 

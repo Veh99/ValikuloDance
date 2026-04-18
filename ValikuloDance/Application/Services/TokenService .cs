@@ -29,16 +29,20 @@ namespace ValikuloDance.Application.Services
             var issuer = _configuration["JwtSettings:Issuer"];
             var audience = _configuration["JwtSettings:Audience"];
 
-            var claims = new[]
+            var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Name, user.Name),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
-                new Claim(JwtRegisteredClaimNames.PhoneNumber, user.Phone),
                 new Claim(ClaimTypes.Role, user.Role),
                 new Claim("userId", user.Id.ToString()),
                 new Claim("role", user.Role)
             };
+
+            if (!string.IsNullOrWhiteSpace(user.Phone))
+            {
+                claims.Add(new Claim(JwtRegisteredClaimNames.PhoneNumber, user.Phone));
+            }
 
             var encodeKey = Encoding.UTF8.GetBytes(StaticJWTKey.JWTKey);
             

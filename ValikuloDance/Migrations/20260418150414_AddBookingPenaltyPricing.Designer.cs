@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ValikuloDance.Infrastructure.Data;
@@ -11,9 +12,11 @@ using ValikuloDance.Infrastructure.Data;
 namespace ValikuloDance.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260418150414_AddBookingPenaltyPricing")]
+    partial class AddBookingPenaltyPricing
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -373,6 +376,7 @@ namespace ValikuloDance.Migrations
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<string>("Email")
+                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -400,6 +404,7 @@ namespace ValikuloDance.Migrations
                         .HasColumnType("character varying(255)");
 
                     b.Property<string>("Phone")
+                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
@@ -437,8 +442,7 @@ namespace ValikuloDance.Migrations
                         .HasFilter("\"Email\" IS NOT NULL");
 
                     b.HasIndex("Phone")
-                        .IsUnique()
-                        .HasFilter("\"Phone\" IS NOT NULL");
+                        .IsUnique();
 
                     b.HasIndex("Role");
 

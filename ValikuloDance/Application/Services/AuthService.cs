@@ -29,11 +29,14 @@ namespace ValikuloDance.Application.Services
 
         public async Task<AuthResponseDto> RegisterAsync(RegisterDto registerDto)
         {
-            var existingUser = await _context.Users
-                .FirstOrDefaultAsync(u => u.Phone == registerDto.Phone);
+            if (!string.IsNullOrWhiteSpace(registerDto.Email))
+            {
+                var existingUserByEmail = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email == registerDto.Email);
 
-            if (existingUser != null)
-                throw new InvalidOperationException("Пользователь с таким номером телефона уже существует");
+                if (existingUserByEmail != null)
+                    throw new InvalidOperationException("Пользователь с таким email уже существует");
+            }
 
             var passwordHash = _passwordHasher.HashPassword(registerDto.Password);
 
@@ -41,8 +44,8 @@ namespace ValikuloDance.Application.Services
             {
                 Id = Guid.NewGuid(),
                 Name = registerDto.Name,
-                Phone = registerDto.Phone,
-                Email = registerDto.Email ?? string.Empty,
+                Phone = null,
+                Email = string.IsNullOrWhiteSpace(registerDto.Email) ? null : registerDto.Email.Trim(),
                 TelegramUsername = registerDto.TelegramUsername,
                 TelegramChatId = registerDto.TelegramUsername,
                 Role = "Client",
