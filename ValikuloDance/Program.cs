@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using NSwag;
@@ -17,7 +18,6 @@ namespace ValikuloDance
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-            // Добавляем сервисы
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
 
@@ -29,7 +29,7 @@ namespace ValikuloDance
             })
             .AddJwtBearer(options =>
             {
-                options.RequireHttpsMetadata = false; // для dev
+                options.RequireHttpsMetadata = false;
                 options.SaveToken = true;
 
                 options.TokenValidationParameters = new TokenValidationParameters
@@ -65,7 +65,6 @@ namespace ValikuloDance
                 config.OperationProcessors.Add(new AspNetCoreOperationSecurityScopeProcessor("Bearer"));
             });
 
-            // Настройка CORS
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowFrontend", policy =>
@@ -82,7 +81,6 @@ namespace ValikuloDance
                 });
             });
 
-            // Настройка базы данных
             builder.Services.AddDbContext<AppDbContext>(options =>
             {
                 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -98,7 +96,6 @@ namespace ValikuloDance
                 options.EnableDetailedErrors(builder.Environment.IsDevelopment());
             });
 
-            // Регистрация сервисов
             builder.Services.AddScoped<BookingService>();
             builder.Services.AddScoped<ITelegramService, TelegramService>();
             builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
@@ -110,33 +107,25 @@ namespace ValikuloDance
             builder.Services.AddHostedService<BookingStatusBackgroundService>();
             builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 
-
             var app = builder.Build();
 
-            // Применяем миграции при запуске
-            //using (var scope = app.Services.CreateScope())
-            //{
-            //    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            //    try
-            //    {
-            //        await dbContext.Database.MigrateAsync();
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        throw;
-            //    }
-            //}
+            var forwardedHeadersOptions = new ForwardedHeadersOptions
+            {
+                ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+            };
+            forwardedHeadersOptions.KnownNetworks.Clear();
+            forwardedHeadersOptions.KnownProxies.Clear();
 
-            // Настройка pipeline
             if (app.Environment.IsDevelopment())
             {
-                app.UseOpenApi(); // вместо UseSwagger
-                app.UseSwaggerUi(); // вместо UseSwaggerUI
+                app.UseOpenApi();
+                app.UseSwaggerUi();
             }
 
+            app.UseForwardedHeaders(forwardedHeadersOptions);
             app.UseHttpsRedirection();
             app.UseCors("AllowFrontend");
-            app.UseAuthentication(); 
+            app.UseAuthentication();
             app.UseAuthorization();
             app.MapControllers();
 

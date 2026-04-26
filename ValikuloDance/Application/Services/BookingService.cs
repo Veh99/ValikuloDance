@@ -48,6 +48,9 @@ namespace ValikuloDance.Application.Services
             var service = await _context.Services.FindAsync(request.ServiceId)
                 ?? throw new KeyNotFoundException("Услуга не найдена");
 
+            if (service.IsPackage)
+                throw new InvalidOperationException("Абонементы нельзя бронировать как отдельное занятие. Сначала оформите покупку абонемента.");
+
             var startTimeUtc = NormalizeToUtc(request.StartTime);
             if (startTimeUtc < DateTime.UtcNow)
                 throw new InvalidOperationException("Нельзя создать запись на прошедшее время");
@@ -250,6 +253,9 @@ namespace ValikuloDance.Application.Services
 
             if (booking.Status == "Completed")
                 throw new InvalidOperationException("Нельзя отменить завершенное занятие");
+
+            if (HasPenaltyPrice(booking))
+                throw new InvalidOperationException("Эту запись нельзя отменить онлайн, потому что к ней уже применен штрафной коэффициент x2. Свяжитесь с администратором.");
 
             booking.Status = "Cancelled";
             booking.UpdatedAt = DateTime.UtcNow;
@@ -521,8 +527,24 @@ namespace ValikuloDance.Application.Services
                 EndTime = booking.EndTime,
                 Status = booking.Status,
                 Price = booking.PriceAtBooking > 0 ? booking.PriceAtBooking : booking.Service.Price,
+                HasPenaltyPrice = HasPenaltyPrice(booking),
+                CanBeCancelledByUser = CanBeCancelledByUser(booking),
                 Notes = booking.Notes
             };
+        }
+
+        private static bool HasPenaltyPrice(Booking booking)
+        {
+            return booking.PriceAtBooking > booking.Service.Price;
+        }
+
+        private static bool CanBeCancelledByUser(Booking booking)
+        {
+            var normalizedStatus = booking.Status?.ToLowerInvariant();
+            if (normalizedStatus is not ("pending" or "confirmed"))
+                return false;
+
+            return !HasPenaltyPrice(booking);
         }
 
         private static bool IsSlotFree(ScheduleSlot slot) => slot.IsAvailable && !slot.IsBooked && slot.BookingId == null;

@@ -27,6 +27,8 @@
         public required DateTime EndTime { get; set; }
         public required string Status { get; set; }
         public required decimal Price { get; set; }
+        public required bool HasPenaltyPrice { get; set; }
+        public required bool CanBeCancelledByUser { get; set; }
         public string? Notes { get; set; }
     }
 
