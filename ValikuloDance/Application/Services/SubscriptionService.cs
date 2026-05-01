@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
 using ValikuloDance.Api.Settings;
+using ValikuloDance.Application.DTOs.Booking;
 using ValikuloDance.Application.DTOs.Subscription;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
@@ -217,6 +218,40 @@ namespace ValikuloDance.Application.Services
             await _context.SaveChangesAsync();
         }
 
+        public async Task RestoreSubscriptionSessionAsync(Booking booking)
+        {
+            if (booking.SubscriptionId == null || booking.PaymentMode != "Subscription" || !booking.IsSubscriptionSessionConsumed)
+            {
+                return;
+            }
+
+            var subscription = await _context.Subscriptions
+                .Include(x => x.SubscriptionPlan)
+                .FirstOrDefaultAsync(x => x.Id == booking.SubscriptionId.Value);
+
+            if (subscription == null)
+            {
+                return;
+            }
+
+            subscription.UsedSessions = Math.Max(0, subscription.UsedSessions - 1);
+            subscription.UpdatedAt = DateTime.UtcNow;
+            booking.IsSubscriptionSessionConsumed = false;
+            booking.UpdatedAt = DateTime.UtcNow;
+
+            if (subscription.Status == "Exhausted")
+            {
+                var expiresAt = subscription.ExpiresAt ?? DateTime.MaxValue;
+                if (expiresAt > DateTime.UtcNow)
+                {
+                    subscription.Status = "Active";
+                    subscription.IsActive = true;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
         public async Task<int> ExpirePendingSubscriptionsAsync()
         {
             var now = DateTime.UtcNow;
@@ -377,7 +412,7 @@ namespace ValikuloDance.Application.Services
             }).ToList();
         }
 
-        public async Task<Booking> CreateGroupBookingAsync(CreateGroupBookingRequest request, ClaimsPrincipal userClaims)
+        public async Task<BookingResponse> CreateGroupBookingAsync(CreateGroupBookingRequest request, ClaimsPrincipal userClaims)
         {
             var userId = ExtractUserId(userClaims);
             var user = await _context.Users.FindAsync(userId)
@@ -401,6 +436,14 @@ namespace ValikuloDance.Application.Services
 
             if (occupiedCount >= slot.Capacity)
                 throw new InvalidOperationException("На это групповое занятие свободных мест больше нет.");
+
+            var hasExistingBooking = await _context.Bookings.AnyAsync(x =>
+                x.UserId == userId &&
+                x.GroupLessonSlotId == slot.Id &&
+                x.Status != "Cancelled");
+
+            if (hasExistingBooking)
+                throw new InvalidOperationException("Вы уже записаны на это групповое занятие.");
 
             var paymentMode = NormalizePaymentMode(request.PaymentMode);
             Subscription? subscription = null;
@@ -452,7 +495,7 @@ namespace ValikuloDance.Application.Services
                 .FirstAsync(x => x.Id == booking.Id);
 
             await _telegramService.SendBookingPendingAsync(bookingForNotification);
-            return bookingForNotification;
+            return MapBookingResponse(bookingForNotification);
         }
 
         public async Task EnsureSubscriptionPlansSyncedAsync()
@@ -640,6 +683,40 @@ namespace ValikuloDance.Application.Services
                     subscription.ExpiresAt > DateTime.UtcNow &&
                     remaining > 0
             };
+        }
+
+        private static BookingResponse MapBookingResponse(Booking booking)
+        {
+            return new BookingResponse
+            {
+                Id = booking.Id,
+                UserId = booking.UserId,
+                TrainerId = booking.TrainerId,
+                ServiceId = booking.ServiceId,
+                SubscriptionId = booking.SubscriptionId,
+                GroupLessonSlotId = booking.GroupLessonSlotId,
+                UserName = booking.User.Name,
+                TrainerName = booking.Trainer.User?.Name ?? "РўСЂРµРЅРµСЂ",
+                ServiceName = booking.Service.Name,
+                StartTime = booking.StartTime,
+                EndTime = booking.EndTime,
+                Status = booking.Status,
+                Price = booking.PaymentMode == "Subscription" ? 0 : booking.PriceAtBooking,
+                HasPenaltyPrice = booking.PriceAtBooking > booking.Service.Price,
+                CanBeCancelledByUser = CanBeCancelledByUser(booking),
+                PaymentMode = booking.PaymentMode,
+                SubscriptionPlanName = booking.Subscription?.SubscriptionPlan?.Name,
+                Notes = booking.Notes
+            };
+        }
+
+        private static bool CanBeCancelledByUser(Booking booking)
+        {
+            var normalizedStatus = booking.Status?.ToLowerInvariant();
+            if (normalizedStatus is not ("pending" or "confirmed"))
+                return false;
+
+            return booking.PriceAtBooking <= booking.Service.Price;
         }
 
         private static string NormalizeFormat(string? format)

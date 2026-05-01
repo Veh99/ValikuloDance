@@ -261,6 +261,7 @@ namespace ValikuloDance.Application.Services
             booking.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _subscriptionService.ConsumeSubscriptionSessionAsync(booking);
             await _telegramService.SendBookingConfirmationAsync(booking);
 
             return MapBookingResponse(booking);
@@ -290,6 +291,7 @@ namespace ValikuloDance.Application.Services
             booking.Status = "Cancelled";
             booking.UpdatedAt = DateTime.UtcNow;
 
+            await _subscriptionService.RestoreSubscriptionSessionAsync(booking);
             await ReleaseBookedScheduleSlotsAsync(booking);
             await _context.SaveChangesAsync();
             await _telegramService.SendBookingCancellationAsync(booking);
@@ -314,11 +316,6 @@ namespace ValikuloDance.Application.Services
             }
 
             await _context.SaveChangesAsync();
-
-            foreach (var booking in expiredBookings)
-            {
-                await _subscriptionService.ConsumeSubscriptionSessionAsync(booking);
-            }
 
             return expiredBookings.Count;
         }
@@ -346,6 +343,7 @@ namespace ValikuloDance.Application.Services
                 booking.User.UpdatedAt = DateTime.UtcNow;
             }
 
+            await _subscriptionService.RestoreSubscriptionSessionAsync(booking);
             await ReleaseBookedScheduleSlotsAsync(booking);
             await _context.SaveChangesAsync();
             await _telegramService.SendBookingCancellationAsync(booking);
@@ -565,7 +563,7 @@ namespace ValikuloDance.Application.Services
                 StartTime = booking.StartTime,
                 EndTime = booking.EndTime,
                 Status = booking.Status,
-                Price = booking.PriceAtBooking > 0 ? booking.PriceAtBooking : booking.Service.Price,
+                Price = booking.PaymentMode == "Subscription" ? 0 : booking.PriceAtBooking,
                 HasPenaltyPrice = HasPenaltyPrice(booking),
                 CanBeCancelledByUser = CanBeCancelledByUser(booking),
                 PaymentMode = booking.PaymentMode,

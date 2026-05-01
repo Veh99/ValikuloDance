@@ -74,6 +74,11 @@ public class BookingController : ControllerBase
         {
             return Conflict(new { message = ex.Message });
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "РћС€РёР±РєР° РїСЂРё СЃРѕР·РґР°РЅРёРё РіСЂСѓРїРїРѕРІРѕР№ Р·Р°РїРёСЃРё");
+            return StatusCode(500, new { message = "Р’РЅСѓС‚СЂРµРЅРЅСЏСЏ РѕС€РёР±РєР° СЃРµСЂРІРµСЂР°" });
+        }
     }
 
     [HttpGet("available-dates/{trainerId}")]
