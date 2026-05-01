@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ValikuloDance.Application.DTOs.Booking;
+using ValikuloDance.Application.DTOs.Subscription;
 using ValikuloDance.Application.Services;
 
 namespace ValikuloDance.Api.Controllers;
@@ -10,11 +11,13 @@ namespace ValikuloDance.Api.Controllers;
 public class BookingController : ControllerBase
 {
     private readonly BookingService _bookingService;
+    private readonly SubscriptionService _subscriptionService;
     private readonly ILogger<BookingController> _logger;
 
-    public BookingController(BookingService bookingService, ILogger<BookingController> logger)
+    public BookingController(BookingService bookingService, SubscriptionService subscriptionService, ILogger<BookingController> logger)
     {
         _bookingService = bookingService;
+        _subscriptionService = subscriptionService;
         _logger = logger;
     }
 
@@ -50,6 +53,29 @@ public class BookingController : ControllerBase
         }
     }
 
+    [Authorize]
+    [HttpPost("group")]
+    public async Task<IActionResult> CreateGroupBooking([FromBody] CreateGroupBookingRequest request)
+    {
+        try
+        {
+            var result = await _subscriptionService.CreateGroupBookingAsync(request, User);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("available-dates/{trainerId}")]
     public async Task<IActionResult> GetAvailableDates(Guid trainerId, [FromQuery] Guid serviceId, [FromQuery] int days = 14)
     {
@@ -61,6 +87,13 @@ public class BookingController : ControllerBase
     public async Task<IActionResult> GetAvailableSlots(Guid trainerId, [FromQuery] Guid serviceId, [FromQuery] DateTime date)
     {
         var slots = await _bookingService.GetAvailableSlotsAsync(trainerId, serviceId, date);
+        return Ok(slots);
+    }
+
+    [HttpGet("group-slots")]
+    public async Task<IActionResult> GetGroupSlots([FromQuery] Guid serviceId, [FromQuery] int days = 21)
+    {
+        var slots = await _subscriptionService.GetUpcomingGroupSlotsAsync(serviceId, days);
         return Ok(slots);
     }
 

@@ -1,10 +1,12 @@
-﻿namespace ValikuloDance.Application.DTOs.Booking
+namespace ValikuloDance.Application.DTOs.Booking
 {
     public class CreateBookingRequest
     {
         public Guid TrainerId { get; set; }
         public Guid ServiceId { get; set; }
         public DateTime StartTime { get; set; }
+        public string PaymentMode { get; set; } = "Single";
+        public Guid? SubscriptionId { get; set; }
         public string? Notes { get; set; }
     }
 
@@ -20,6 +22,8 @@
         public required Guid UserId { get; set; }
         public required Guid TrainerId { get; set; }
         public required Guid ServiceId { get; set; }
+        public Guid? SubscriptionId { get; set; }
+        public Guid? GroupLessonSlotId { get; set; }
         public required string UserName { get; set; }
         public required string TrainerName { get; set; }
         public required string ServiceName { get; set; }
@@ -29,6 +33,8 @@
         public required decimal Price { get; set; }
         public required bool HasPenaltyPrice { get; set; }
         public required bool CanBeCancelledByUser { get; set; }
+        public required string PaymentMode { get; set; }
+        public string? SubscriptionPlanName { get; set; }
         public string? Notes { get; set; }
     }
 

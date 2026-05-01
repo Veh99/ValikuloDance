@@ -26,11 +26,13 @@ namespace ValikuloDance.Application.Services
 
         private readonly AppDbContext _context;
         private readonly ITelegramService _telegramService;
+        private readonly SubscriptionService _subscriptionService;
 
-        public BookingService(AppDbContext context, ITelegramService telegramService)
+        public BookingService(AppDbContext context, ITelegramService telegramService, SubscriptionService subscriptionService)
         {
             _context = context;
             _telegramService = telegramService;
+            _subscriptionService = subscriptionService;
         }
 
         public async Task<BookingResponse> CreateBookingAsync(CreateBookingRequest request, ClaimsPrincipal userClaims)
@@ -49,7 +51,21 @@ namespace ValikuloDance.Application.Services
                 ?? throw new KeyNotFoundException("Услуга не найдена");
 
             if (service.IsPackage)
-                throw new InvalidOperationException("Абонементы нельзя бронировать как отдельное занятие. Сначала оформите покупку абонемента.");
+                throw new InvalidOperationException("Абонементы нельзя бронировать как отдельное занятие. Сначала оформите заявку на абонемент.");
+
+            if (NormalizeFormat(service.Format) != "Individual")
+                throw new InvalidOperationException("Для групповых занятий используйте отдельную запись по фиксированному расписанию.");
+
+            var paymentMode = NormalizePaymentMode(request.PaymentMode);
+            Subscription? subscription = null;
+
+            if (paymentMode == "Subscription")
+            {
+                if (request.SubscriptionId == null)
+                    throw new InvalidOperationException("Выберите активный абонемент для записи.");
+
+                subscription = await _subscriptionService.ValidateSubscriptionForBookingAsync(userId, request.SubscriptionId.Value, "Individual");
+            }
 
             var startTimeUtc = NormalizeToUtc(request.StartTime);
             if (startTimeUtc < DateTime.UtcNow)
@@ -65,7 +81,9 @@ namespace ValikuloDance.Application.Services
             if (slotsToBook.Count == 0)
                 throw new InvalidOperationException("Выбранное время недоступно");
 
-            var bookingPrice = user.HasLateCancellationPenalty ? service.Price * 2 : service.Price;
+            var bookingPrice = paymentMode == "Subscription"
+                ? 0
+                : (user.HasLateCancellationPenalty ? service.Price * 2 : service.Price);
 
             var booking = new Booking
             {
@@ -73,17 +91,19 @@ namespace ValikuloDance.Application.Services
                 UserId = userId,
                 TrainerId = request.TrainerId,
                 ServiceId = request.ServiceId,
+                SubscriptionId = subscription?.Id,
                 StartTime = startTimeUtc,
                 EndTime = endTimeUtc,
                 CreatedAt = DateTime.UtcNow,
                 Notes = request.Notes,
                 Status = "Pending",
+                PaymentMode = paymentMode,
                 PriceAtBooking = bookingPrice
             };
 
             _context.Bookings.Add(booking);
 
-            if (user.HasLateCancellationPenalty)
+            if (user.HasLateCancellationPenalty && paymentMode == "Single")
             {
                 user.HasLateCancellationPenalty = false;
                 user.UpdatedAt = DateTime.UtcNow;
@@ -120,6 +140,9 @@ namespace ValikuloDance.Application.Services
 
             var service = await _context.Services.FindAsync(serviceId)
                 ?? throw new KeyNotFoundException("Услуга не найдена");
+
+            if (service.IsPackage || NormalizeFormat(service.Format) != "Individual")
+                throw new InvalidOperationException("Доступные даты рассчитываются только для индивидуальных разовых занятий.");
 
             var timeZone = GetMoscowTimeZone();
             var todayLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone).Date;
@@ -158,6 +181,9 @@ namespace ValikuloDance.Application.Services
             var service = await _context.Services.FindAsync(serviceId)
                 ?? throw new KeyNotFoundException("Услуга не найдена");
 
+            if (service.IsPackage || NormalizeFormat(service.Format) != "Individual")
+                throw new InvalidOperationException("Доступные слоты рассчитываются только для индивидуальных разовых занятий.");
+
             var timeZone = GetMoscowTimeZone();
             var localDate = date.Kind switch
             {
@@ -189,6 +215,7 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.User)
                 .Include(b => b.Trainer).ThenInclude(t => t.User)
                 .Include(b => b.Service)
+                .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .Where(b => b.UserId == userId)
                 .OrderBy(b => b.StartTime)
                 .ToListAsync();
@@ -204,6 +231,7 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.User)
                 .Include(b => b.Trainer).ThenInclude(t => t.User)
                 .Include(b => b.Service)
+                .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .Where(b => b.TrainerId == trainer.Id)
                 .OrderBy(b => b.StartTime)
                 .ToListAsync();
@@ -219,6 +247,7 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.User)
                 .Include(b => b.Trainer).ThenInclude(t => t.User)
                 .Include(b => b.Service)
+                .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .FirstOrDefaultAsync(b => b.Id == bookingId && b.TrainerId == trainer.Id)
                 ?? throw new KeyNotFoundException("Запись не найдена");
 
@@ -245,6 +274,7 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.User)
                 .Include(b => b.Trainer).ThenInclude(t => t.User)
                 .Include(b => b.Service)
+                .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .FirstOrDefaultAsync(b => b.Id == bookingId && b.TrainerId == trainer.Id)
                 ?? throw new KeyNotFoundException("Запись не найдена");
 
@@ -255,23 +285,12 @@ namespace ValikuloDance.Application.Services
                 throw new InvalidOperationException("Нельзя отменить завершенное занятие");
 
             if (HasPenaltyPrice(booking))
-                throw new InvalidOperationException("Эту запись нельзя отменить онлайн, потому что к ней уже применен штрафной коэффициент x2. Свяжитесь с администратором.");
+                throw new InvalidOperationException("Эту запись нельзя отменить онлайн, потому что к ней уже применён штрафной коэффициент x2. Свяжитесь с администратором.");
 
             booking.Status = "Cancelled";
             booking.UpdatedAt = DateTime.UtcNow;
 
-            var bookedSlots = await _context.ScheduleSlots
-                .Where(s => s.BookingId == booking.Id)
-                .ToListAsync();
-
-            foreach (var slot in bookedSlots)
-            {
-                slot.BookingId = null;
-                slot.IsBooked = false;
-                slot.IsAvailable = true;
-                slot.UpdatedAt = DateTime.UtcNow;
-            }
-
+            await ReleaseBookedScheduleSlotsAsync(booking);
             await _context.SaveChangesAsync();
             await _telegramService.SendBookingCancellationAsync(booking);
 
@@ -281,6 +300,7 @@ namespace ValikuloDance.Application.Services
         public async Task<int> CompleteExpiredBookingsAsync()
         {
             var expiredBookings = await _context.Bookings
+                .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .Where(b => b.Status == "Confirmed" && b.EndTime <= DateTime.UtcNow)
                 .ToListAsync();
 
@@ -294,6 +314,12 @@ namespace ValikuloDance.Application.Services
             }
 
             await _context.SaveChangesAsync();
+
+            foreach (var booking in expiredBookings)
+            {
+                await _subscriptionService.ConsumeSubscriptionSessionAsync(booking);
+            }
+
             return expiredBookings.Count;
         }
 
@@ -314,10 +340,23 @@ namespace ValikuloDance.Application.Services
             booking.Status = "Cancelled";
             booking.UpdatedAt = DateTime.UtcNow;
 
-            if (booking.StartTime < DateTime.UtcNow.AddHours(3))
+            if (booking.StartTime < DateTime.UtcNow.AddHours(3) && booking.PaymentMode == "Single")
             {
                 booking.User.HasLateCancellationPenalty = true;
                 booking.User.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await ReleaseBookedScheduleSlotsAsync(booking);
+            await _context.SaveChangesAsync();
+            await _telegramService.SendBookingCancellationAsync(booking);
+            return true;
+        }
+
+        private async Task ReleaseBookedScheduleSlotsAsync(Booking booking)
+        {
+            if (booking.GroupLessonSlotId != null)
+            {
+                return;
             }
 
             var bookedSlots = await _context.ScheduleSlots
@@ -331,10 +370,6 @@ namespace ValikuloDance.Application.Services
                 slot.IsAvailable = true;
                 slot.UpdatedAt = DateTime.UtcNow;
             }
-
-            await _context.SaveChangesAsync();
-            await _telegramService.SendBookingCancellationAsync(booking);
-            return true;
         }
 
         private async Task<List<DateTime>> GetAvailableStartTimesForDateAsync(Guid trainerId, DateTime localDate, int durationMinutes)
@@ -490,6 +525,7 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.User)
                 .Include(b => b.Trainer).ThenInclude(t => t.User)
                 .Include(b => b.Service)
+                .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .FirstOrDefaultAsync(b => b.Id == bookingId && b.UserId == userId);
         }
 
@@ -499,6 +535,7 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.User)
                 .Include(b => b.Trainer).ThenInclude(t => t.User)
                 .Include(b => b.Service)
+                .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .FirstOrDefaultAsync(b => b.Id == bookingId);
         }
 
@@ -520,8 +557,10 @@ namespace ValikuloDance.Application.Services
                 UserId = booking.UserId,
                 TrainerId = booking.TrainerId,
                 ServiceId = booking.ServiceId,
+                SubscriptionId = booking.SubscriptionId,
+                GroupLessonSlotId = booking.GroupLessonSlotId,
                 UserName = booking.User.Name,
-                TrainerName = booking.Trainer.User.Name,
+                TrainerName = booking.Trainer.User?.Name ?? "Тренер",
                 ServiceName = booking.Service.Name,
                 StartTime = booking.StartTime,
                 EndTime = booking.EndTime,
@@ -529,6 +568,8 @@ namespace ValikuloDance.Application.Services
                 Price = booking.PriceAtBooking > 0 ? booking.PriceAtBooking : booking.Service.Price,
                 HasPenaltyPrice = HasPenaltyPrice(booking),
                 CanBeCancelledByUser = CanBeCancelledByUser(booking),
+                PaymentMode = booking.PaymentMode,
+                SubscriptionPlanName = booking.Subscription?.SubscriptionPlan?.Name,
                 Notes = booking.Notes
             };
         }
@@ -583,6 +624,20 @@ namespace ValikuloDance.Application.Services
             {
                 return TimeZoneInfo.FindSystemTimeZoneById("Europe/Moscow");
             }
+        }
+
+        private static string NormalizePaymentMode(string? paymentMode)
+        {
+            return string.Equals(paymentMode, "Subscription", StringComparison.OrdinalIgnoreCase)
+                ? "Subscription"
+                : "Single";
+        }
+
+        private static string NormalizeFormat(string? format)
+        {
+            return string.Equals(format, "Group", StringComparison.OrdinalIgnoreCase)
+                ? "Group"
+                : "Individual";
         }
     }
 }

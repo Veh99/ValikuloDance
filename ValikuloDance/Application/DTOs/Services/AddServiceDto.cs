@@ -11,6 +11,8 @@
         public DateTime? UpdatedAt { get; set; }
         public bool IsDeleted { get; set; }
         public string? Description { get; set; }
+        public string Format { get; set; } = "Individual";
         public bool IsPackage { get; set; }
+        public int? SessionsCount { get; set; }
     }
 }

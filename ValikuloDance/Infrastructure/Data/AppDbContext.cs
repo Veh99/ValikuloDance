@@ -14,6 +14,8 @@ namespace ValikuloDance.Infrastructure.Data
         public DbSet<Service> Services { get; set; }
         public DbSet<Booking> Bookings { get; set; }
         public DbSet<Subscription> Subscriptions { get; set; }
+        public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
+        public DbSet<GroupLessonSlot> GroupLessonSlots { get; set; }
         public DbSet<ScheduleSlot> ScheduleSlots { get; set; }
         public DbSet<TelegramChatBinding> TelegramChatBindings { get; set; }
         public DbSet<TrainerWorkingHour> TrainerWorkingHours { get; set; }
@@ -118,6 +120,21 @@ namespace ValikuloDance.Infrastructure.Data
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.Description).HasMaxLength(500);
                 entity.Property(e => e.Price).HasPrecision(10, 2);
+                entity.Property(e => e.Format).IsRequired().HasMaxLength(20).HasDefaultValue("Individual");
+            });
+
+            modelBuilder.Entity<SubscriptionPlan>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(120);
+                entity.Property(e => e.Description).HasMaxLength(500);
+                entity.Property(e => e.Format).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.Price).HasPrecision(10, 2);
+
+                entity.HasOne(e => e.SourceService)
+                    .WithMany()
+                    .HasForeignKey(e => e.SourceServiceId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             modelBuilder.Entity<Booking>(entity =>
@@ -139,22 +156,62 @@ namespace ValikuloDance.Infrastructure.Data
                     .HasForeignKey(e => e.ServiceId)
                     .OnDelete(DeleteBehavior.Cascade);
 
+                entity.HasOne(e => e.Subscription)
+                    .WithMany(s => s.Bookings)
+                    .HasForeignKey(e => e.SubscriptionId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(e => e.GroupLessonSlot)
+                    .WithMany(s => s.Bookings)
+                    .HasForeignKey(e => e.GroupLessonSlotId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
                 entity.HasIndex(e => e.StartTime);
                 entity.HasIndex(e => e.Status);
+                entity.HasIndex(e => new { e.UserId, e.SubscriptionId });
 
                 entity.Property(e => e.PriceAtBooking)
                     .HasPrecision(10, 2);
+
+                entity.Property(e => e.PaymentMode)
+                    .IsRequired()
+                    .HasMaxLength(20)
+                    .HasDefaultValue("Single");
             });
 
             modelBuilder.Entity<Subscription>(entity =>
             {
                 entity.HasKey(e => e.Id);
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(30);
+
                 entity.HasOne(e => e.User)
                     .WithMany(u => u.Subscriptions)
-                    .HasForeignKey(e => e.UserId);
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.SubscriptionPlan)
+                    .WithMany(p => p.Subscriptions)
+                    .HasForeignKey(e => e.SubscriptionPlanId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(e => new { e.UserId, e.Status });
+                entity.HasIndex(e => e.PaymentDeadlineAt);
+            });
+
+            modelBuilder.Entity<GroupLessonSlot>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ServiceId, e.TrainerId, e.StartTime }).IsUnique();
+
                 entity.HasOne(e => e.Service)
                     .WithMany()
-                    .HasForeignKey(e => e.ServiceId);
+                    .HasForeignKey(e => e.ServiceId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Trainer)
+                    .WithMany()
+                    .HasForeignKey(e => e.TrainerId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             modelBuilder.Entity<ScheduleSlot>(entity =>

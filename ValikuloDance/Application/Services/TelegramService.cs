@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
+using ValikuloDance.Api.Settings;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
 using ValikuloDance.Infrastructure.Data;
@@ -13,11 +15,20 @@ namespace ValikuloDance.Application.Services
         private readonly ITelegramBotClient _botClient;
         private readonly ILogger<TelegramService> _logger;
         private readonly AppDbContext _context;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly SubscriptionWorkflowSettings _subscriptionSettings;
 
-        public TelegramService(IConfiguration configuration, ILogger<TelegramService> logger, AppDbContext context)
+        public TelegramService(
+            IConfiguration configuration,
+            ILogger<TelegramService> logger,
+            AppDbContext context,
+            IServiceProvider serviceProvider,
+            IOptions<SubscriptionWorkflowSettings> subscriptionSettings)
         {
             _logger = logger;
             _context = context;
+            _serviceProvider = serviceProvider;
+            _subscriptionSettings = subscriptionSettings.Value;
             var botToken = configuration["Telegram:BotToken"]!;
             _botClient = new TelegramBotClient(botToken);
         }
@@ -61,7 +72,7 @@ namespace ValikuloDance.Application.Services
             {
                 await _botClient.SendMessage(
                     chatId: new ChatId(message.Chat.Id),
-                    text: "Telegram успешно привязан. Теперь вы будете получать уведомления о записях.");
+                    text: "Telegram успешно привязан. Теперь вы будете получать уведомления о записях и заявках на абонементы.");
             }
         }
 
@@ -77,7 +88,10 @@ namespace ValikuloDance.Application.Services
                 var timeStr = localStartTime.ToString("HH:mm");
                 var trainerName = booking.Trainer?.User?.Name ?? "Тренер";
                 var serviceName = booking.Service?.Name ?? "Услуга";
-                var servicePrice = (booking.PriceAtBooking > 0 ? booking.PriceAtBooking : booking.Service?.Price ?? 0).ToString("0.##");
+                var servicePrice = GetBookingPriceText(booking);
+                var paymentLabel = booking.PaymentMode == "Subscription"
+                    ? $"Абонемент{(booking.Subscription?.SubscriptionPlan?.Name != null ? $": {booking.Subscription.SubscriptionPlan.Name}" : string.Empty)}"
+                    : "Разово";
 
                 var userRecipient = await ResolveRecipientAsync(
                     booking.User.Id,
@@ -94,7 +108,8 @@ namespace ValikuloDance.Application.Services
                     Время: {timeStr}
                     Услуга: {serviceName}
                     Тренер: {trainerName}
-                    Стоимость: {servicePrice} ₽
+                    Оплата: {paymentLabel}
+                    Стоимость: {servicePrice}
                     Статус: Ожидает подтверждения
                     """;
 
@@ -117,6 +132,7 @@ namespace ValikuloDance.Application.Services
                         Дата: {dateStr}
                         Время: {timeStr}
                         Услуга: {serviceName}
+                        Оплата: {paymentLabel}
                         Статус: Ожидает вашего решения
                         """;
 
@@ -151,7 +167,7 @@ namespace ValikuloDance.Application.Services
                 var timeStr = localStartTime.ToString("HH:mm");
                 var trainerName = booking.Trainer?.User?.Name ?? "Тренер";
                 var serviceName = booking.Service?.Name ?? "Услуга";
-                var servicePrice = (booking.PriceAtBooking > 0 ? booking.PriceAtBooking : booking.Service?.Price ?? 0).ToString("0.##");
+                var servicePrice = GetBookingPriceText(booking);
 
                 var userRecipient = await ResolveRecipientAsync(
                     booking.User.Id,
@@ -168,7 +184,7 @@ namespace ValikuloDance.Application.Services
                     Время: {timeStr}
                     Услуга: {serviceName}
                     Тренер: {trainerName}
-                    Стоимость: {servicePrice} ₽
+                    Стоимость: {servicePrice}
                     Статус: Подтверждено
                     """;
 
@@ -262,6 +278,127 @@ namespace ValikuloDance.Application.Services
             }
         }
 
+        public async Task SendSubscriptionRequestCreatedAsync(Subscription subscription)
+        {
+            var userRecipient = await ResolveRecipientAsync(
+                subscription.User.Id,
+                subscription.User.TelegramChatId,
+                subscription.User.TelegramUsername);
+
+            if (userRecipient != null)
+            {
+                var paymentDetails = BuildPaymentDetailsMessage();
+                var userMessage = $"""
+                Заявка на абонемент создана
+
+                План: {subscription.SubscriptionPlan.Name}
+                Формат: {GetFormatLabel(subscription.SubscriptionPlan.Format)}
+                Занятий: {subscription.TotalSessions}
+                Стоимость: {subscription.SubscriptionPlan.Price:0.##} ₽
+                Оплатите абонемент в течение 1 часа.
+                Если оплата и подтверждение не будут завершены за это время, заявка отменится автоматически.
+
+                {paymentDetails}
+                """;
+
+                await SendMessageAsync(userRecipient, userMessage);
+            }
+
+            var approverRecipient = await ResolveApproverRecipientAsync();
+            if (approverRecipient != null)
+            {
+                var deadline = ConvertToMoscowTime(subscription.PaymentDeadlineAt);
+                var approverMessage = $"""
+                Новая заявка на абонемент
+
+                Клиент: {subscription.User.Name}
+                План: {subscription.SubscriptionPlan.Name}
+                Формат: {GetFormatLabel(subscription.SubscriptionPlan.Format)}
+                Занятий: {subscription.TotalSessions}
+                Стоимость: {subscription.SubscriptionPlan.Price:0.##} ₽
+                Оплатить и подтвердить нужно до: {deadline:dd.MM.yyyy HH:mm}
+                """;
+
+                var keyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[]
+                    {
+                        InlineKeyboardButton.WithCallbackData("Подтвердить абонемент", $"subscription:approve:{subscription.Id}"),
+                        InlineKeyboardButton.WithCallbackData("Отклонить", $"subscription:reject:{subscription.Id}")
+                    }
+                });
+
+                await SendMessageAsync(approverRecipient, approverMessage, keyboard);
+            }
+        }
+
+        public async Task SendSubscriptionApprovedAsync(Subscription subscription)
+        {
+            var recipient = await ResolveRecipientAsync(
+                subscription.User.Id,
+                subscription.User.TelegramChatId,
+                subscription.User.TelegramUsername);
+
+            if (recipient == null)
+                return;
+
+            var expiresAtLocal = subscription.ExpiresAt.HasValue
+                ? ConvertToMoscowTime(subscription.ExpiresAt.Value).ToString("dd.MM.yyyy HH:mm")
+                : "не указан";
+
+            var message = $"""
+            Абонемент активирован
+
+            План: {subscription.SubscriptionPlan.Name}
+            Формат: {GetFormatLabel(subscription.SubscriptionPlan.Format)}
+            Осталось занятий: {subscription.TotalSessions - subscription.UsedSessions} из {subscription.TotalSessions}
+            Действует до: {expiresAtLocal}
+            """;
+
+            await SendMessageAsync(recipient, message);
+        }
+
+        public async Task SendSubscriptionRejectedAsync(Subscription subscription)
+        {
+            var recipient = await ResolveRecipientAsync(
+                subscription.User.Id,
+                subscription.User.TelegramChatId,
+                subscription.User.TelegramUsername);
+
+            if (recipient == null)
+                return;
+
+            var message = $"""
+            Заявка на абонемент отклонена
+
+            План: {subscription.SubscriptionPlan.Name}
+            Причина: {subscription.RejectionReason ?? "Не указана"}
+            """;
+
+            await SendMessageAsync(recipient, message);
+        }
+
+        public async Task SendSubscriptionExpiredAsync(Subscription subscription)
+        {
+            var recipient = await ResolveRecipientAsync(
+                subscription.User.Id,
+                subscription.User.TelegramChatId,
+                subscription.User.TelegramUsername);
+
+            if (recipient == null)
+                return;
+
+            var message = $"""
+            Заявка на абонемент истекла
+
+            План: {subscription.SubscriptionPlan.Name}
+            В течение 1 часа не было завершено подтверждение оплаты, поэтому заявка автоматически закрыта.
+            Если абонемент всё ещё нужен, оформите новую заявку на сайте.
+            """;
+
+            await SendMessageAsync(recipient, message);
+        }
+
         public async Task UpsertChatBindingAsync(Guid userId, string telegramChatId, string? telegramUsername)
         {
             var normalizedChatId = telegramChatId.Trim();
@@ -304,12 +441,24 @@ namespace ValikuloDance.Application.Services
                 return;
 
             var parts = callbackQuery.Data.Split(':', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 3 || parts[0] != "booking" || !Guid.TryParse(parts[2], out var bookingId))
+            if (parts.Length != 3 || !Guid.TryParse(parts[2], out var entityId))
                 return;
 
-            var action = parts[1];
-            var chatId = callbackQuery.Message?.Chat.Id.ToString();
+            if (parts[0] == "booking")
+            {
+                await HandleBookingCallbackAsync(callbackQuery, parts[1], entityId);
+                return;
+            }
 
+            if (parts[0] == "subscription")
+            {
+                await HandleSubscriptionCallbackAsync(callbackQuery, parts[1], entityId);
+            }
+        }
+
+        private async Task HandleBookingCallbackAsync(CallbackQuery callbackQuery, string action, Guid bookingId)
+        {
+            var chatId = callbackQuery.Message?.Chat.Id.ToString();
             if (string.IsNullOrWhiteSpace(chatId))
                 return;
 
@@ -337,6 +486,7 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.User)
                 .Include(b => b.Trainer).ThenInclude(t => t.User)
                 .Include(b => b.Service)
+                .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .FirstOrDefaultAsync(b => b.Id == bookingId && b.TrainerId == trainer.Id);
 
             if (booking == null)
@@ -370,16 +520,19 @@ namespace ValikuloDance.Application.Services
                 booking.Status = "Cancelled";
                 booking.UpdatedAt = DateTime.UtcNow;
 
-                var bookedSlots = await _context.ScheduleSlots
-                    .Where(s => s.BookingId == booking.Id)
-                    .ToListAsync();
-
-                foreach (var slot in bookedSlots)
+                if (booking.GroupLessonSlotId == null)
                 {
-                    slot.BookingId = null;
-                    slot.IsBooked = false;
-                    slot.IsAvailable = true;
-                    slot.UpdatedAt = DateTime.UtcNow;
+                    var bookedSlots = await _context.ScheduleSlots
+                        .Where(s => s.BookingId == booking.Id)
+                        .ToListAsync();
+
+                    foreach (var slot in bookedSlots)
+                    {
+                        slot.BookingId = null;
+                        slot.IsBooked = false;
+                        slot.IsAvailable = true;
+                        slot.UpdatedAt = DateTime.UtcNow;
+                    }
                 }
 
                 await _context.SaveChangesAsync();
@@ -414,6 +567,62 @@ namespace ValikuloDance.Application.Services
             }
         }
 
+        private async Task HandleSubscriptionCallbackAsync(CallbackQuery callbackQuery, string action, Guid subscriptionId)
+        {
+            var approverRecipient = await ResolveApproverRecipientAsync();
+            var callbackChatId = callbackQuery.Message?.Chat.Id.ToString();
+
+            if (approverRecipient == null || callbackChatId != approverRecipient.ChatId)
+            {
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Это действие доступно только подтверждающему.");
+                return;
+            }
+
+            using var scope = _serviceProvider.CreateScope();
+            var subscriptionService = scope.ServiceProvider.GetRequiredService<SubscriptionService>();
+
+            Subscription? subscription = null;
+            if (action == "approve")
+            {
+                subscription = await subscriptionService.ApproveSubscriptionAsync(subscriptionId);
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, subscription == null ? "Заявка уже обработана." : "Абонемент подтверждён.");
+            }
+            else if (action == "reject")
+            {
+                subscription = await subscriptionService.RejectSubscriptionAsync(subscriptionId, "Заявка отклонена подтверждающим.");
+                await _botClient.AnswerCallbackQuery(callbackQuery.Id, subscription == null ? "Заявка уже обработана." : "Заявка отклонена.");
+            }
+
+            if (callbackQuery.Message != null && subscription != null)
+            {
+                var statusText = subscription.Status switch
+                {
+                    "Active" => "Подтверждён",
+                    "Rejected" => "Отклонён",
+                    "Expired" => "Истёк",
+                    _ => subscription.Status
+                };
+
+                var deadline = ConvertToMoscowTime(subscription.PaymentDeadlineAt);
+                var updatedText = $"""
+                Заявка на абонемент
+
+                Клиент: {subscription.User.Name}
+                План: {subscription.SubscriptionPlan.Name}
+                Формат: {GetFormatLabel(subscription.SubscriptionPlan.Format)}
+                Занятий: {subscription.TotalSessions}
+                Стоимость: {subscription.SubscriptionPlan.Price:0.##} ₽
+                Дедлайн оплаты: {deadline:dd.MM.yyyy HH:mm}
+                Статус: {statusText}
+                """;
+
+                await _botClient.EditMessageText(
+                    chatId: callbackQuery.Message.Chat.Id,
+                    messageId: callbackQuery.Message.MessageId,
+                    text: updatedText);
+            }
+        }
+
         private async Task<ValikuloDance.Domain.Entities.User?> FindUserByTelegramUsernameAsync(string telegramUsername)
         {
             var normalized = NormalizeUsername(telegramUsername);
@@ -436,7 +645,6 @@ namespace ValikuloDance.Application.Services
                     : new ChatId(recipient.ChatId);
 
                 await _botClient.SendMessage(chatId: chatId, text: message, replyMarkup: replyMarkup);
-
                 _logger.LogInformation("Telegram message sent to {TelegramRecipient}", recipient.LogValue);
             }
             catch (Exception ex)
@@ -466,6 +674,72 @@ namespace ValikuloDance.Application.Services
             }
 
             return null;
+        }
+
+        private async Task<TelegramRecipient?> ResolveApproverRecipientAsync()
+        {
+            if (!string.IsNullOrWhiteSpace(_subscriptionSettings.ApproverTelegramChatId))
+            {
+                return new TelegramRecipient(
+                    _subscriptionSettings.ApproverTelegramChatId.Trim(),
+                    _subscriptionSettings.ApproverTelegramUsername ?? _subscriptionSettings.ApproverTelegramChatId.Trim());
+            }
+
+            var username = NormalizeUsername(_subscriptionSettings.ApproverTelegramUsername);
+            if (string.IsNullOrWhiteSpace(username))
+                return null;
+
+            var binding = await _context.TelegramChatBindings
+                .AsNoTracking()
+                .Where(x => x.IsActive && !x.IsDeleted && x.TelegramUsername != null)
+                .FirstOrDefaultAsync(x => EF.Functions.ILike(x.TelegramUsername!, username));
+
+            if (binding == null)
+            {
+                return null;
+            }
+
+            return new TelegramRecipient(binding.TelegramChatId, binding.TelegramUsername ?? binding.TelegramChatId);
+        }
+
+        private string BuildPaymentDetailsMessage()
+        {
+            var lines = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(_subscriptionSettings.PaymentLink))
+            {
+                lines.Add($"Ссылка на оплату: {_subscriptionSettings.PaymentLink}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(_subscriptionSettings.PaymentCardDetails))
+            {
+                lines.Add($"Реквизиты карты: {_subscriptionSettings.PaymentCardDetails}");
+            }
+
+            if (lines.Count == 0)
+            {
+                lines.Add("Реквизиты для оплаты пока не настроены. Пожалуйста, добавьте их в backend-конфиг SubscriptionWorkflow.");
+            }
+
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        private static string GetBookingPriceText(Booking booking)
+        {
+            if (booking.PaymentMode == "Subscription")
+            {
+                return "0 ₽ (по абонементу)";
+            }
+
+            var price = booking.PriceAtBooking > 0 ? booking.PriceAtBooking : booking.Service?.Price ?? 0;
+            return $"{price:0.##} ₽";
+        }
+
+        private static string GetFormatLabel(string format)
+        {
+            return string.Equals(format, "Group", StringComparison.OrdinalIgnoreCase)
+                ? "Групповой"
+                : "Индивидуальный";
         }
 
         private static string? NormalizeUsername(string? telegramUsername)

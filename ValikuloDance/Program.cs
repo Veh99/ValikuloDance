@@ -97,6 +97,7 @@ namespace ValikuloDance
             });
 
             builder.Services.AddScoped<BookingService>();
+            builder.Services.AddScoped<SubscriptionService>();
             builder.Services.AddScoped<ITelegramService, TelegramService>();
             builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
             builder.Services.AddScoped<IAuthService, AuthService>();
@@ -105,7 +106,9 @@ namespace ValikuloDance
             builder.Services.AddScoped<ITrainerService, TrainerService>();
             builder.Services.AddHostedService<TelegramPollingService>();
             builder.Services.AddHostedService<BookingStatusBackgroundService>();
+            builder.Services.AddHostedService<SubscriptionMaintenanceBackgroundService>();
             builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+            builder.Services.Configure<SubscriptionWorkflowSettings>(builder.Configuration.GetSection("SubscriptionWorkflow"));
 
             var app = builder.Build();
 

@@ -1,9 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using ValikuloDance.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ValikuloDance.Application.DTOs.Services;
 using ValikuloDance.Domain.Entities;
+using ValikuloDance.Infrastructure.Data;
 
 namespace ValikuloDance.Api.Controllers
 {
@@ -31,6 +31,7 @@ namespace ValikuloDance.Api.Controllers
                     s.Description,
                     s.Price,
                     s.DurationMinutes,
+                    s.Format,
                     s.IsPackage,
                     s.SessionsCount,
                     s.Icon
@@ -44,7 +45,9 @@ namespace ValikuloDance.Api.Controllers
         [Authorize]
         public async Task<IActionResult> Add(AddServiceDto dto)
         {
-            var service = new Service()
+            var format = string.Equals(dto.Format, "Group", StringComparison.OrdinalIgnoreCase) ? "Group" : "Individual";
+
+            var service = new Service
             {
                 Id = dto.Id,
                 CreatedAt = dto.CreatedAt,
@@ -56,6 +59,8 @@ namespace ValikuloDance.Api.Controllers
                 Description = dto.Description,
                 IsDeleted = dto.IsDeleted,
                 IsPackage = dto.IsPackage,
+                SessionsCount = dto.SessionsCount,
+                Format = format
             };
 
             await _context.Services.AddAsync(service);
@@ -71,7 +76,7 @@ namespace ValikuloDance.Api.Controllers
             var service = await _context.Services.FindAsync(id);
             if (service is null)
                 return NotFound("Услуга не найдена");
-            
+
             _context.Services.Remove(service);
             await _context.SaveChangesAsync();
 
