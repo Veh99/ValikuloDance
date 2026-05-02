@@ -489,6 +489,9 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .FirstOrDefaultAsync(b => b.Id == bookingId && b.TrainerId == trainer.Id);
 
+            using var scope = _serviceProvider.CreateScope();
+            var subscriptionService = scope.ServiceProvider.GetRequiredService<SubscriptionService>();
+
             if (booking == null)
             {
                 await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Запись не найдена.");
@@ -512,6 +515,7 @@ namespace ValikuloDance.Application.Services
                 booking.Status = "Confirmed";
                 booking.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
+                await subscriptionService.ConsumeSubscriptionSessionAsync(booking);
                 await SendBookingConfirmationAsync(booking);
                 await _botClient.AnswerCallbackQuery(callbackQuery.Id, "Запись подтверждена.");
             }
@@ -519,6 +523,8 @@ namespace ValikuloDance.Application.Services
             {
                 booking.Status = "Cancelled";
                 booking.UpdatedAt = DateTime.UtcNow;
+
+                await subscriptionService.RestoreSubscriptionSessionAsync(booking);
 
                 if (booking.GroupLessonSlotId == null)
                 {
