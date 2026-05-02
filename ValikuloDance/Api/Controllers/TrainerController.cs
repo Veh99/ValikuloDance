@@ -36,6 +36,7 @@ public class TrainerController : ControllerBase
                 t.ExperienceYears,
                 t.DanceStyles,
                 t.Instagram,
+                t.Telegram,
                 t.User.TelegramUsername,
                 WorkingHours = t.WorkingHours.Select(w => new
                 {
@@ -70,6 +71,7 @@ public class TrainerController : ControllerBase
             trainer.ExperienceYears,
             trainer.DanceStyles,
             trainer.Instagram,
+            trainer.Telegram,
             trainer.User.TelegramUsername,
             WorkingHours = trainer.WorkingHours.Select(w => new
             {
