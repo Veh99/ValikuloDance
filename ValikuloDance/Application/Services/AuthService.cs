@@ -38,6 +38,7 @@ namespace ValikuloDance.Application.Services
                     throw new InvalidOperationException("Пользователь с таким email уже существует");
             }
 
+            var telegramUsername = registerDto.TelegramUsername.Trim().TrimStart('@');
             var passwordHash = _passwordHasher.HashPassword(registerDto.Password);
 
             var user = new User
@@ -46,8 +47,8 @@ namespace ValikuloDance.Application.Services
                 Name = registerDto.Name,
                 Phone = null,
                 Email = string.IsNullOrWhiteSpace(registerDto.Email) ? null : registerDto.Email.Trim(),
-                TelegramUsername = registerDto.TelegramUsername,
-                TelegramChatId = registerDto.TelegramUsername,
+                TelegramUsername = telegramUsername,
+                TelegramChatId = telegramUsername,
                 Role = "Client",
                 CreatedAt = DateTime.UtcNow,
                 PasswordHash = passwordHash,

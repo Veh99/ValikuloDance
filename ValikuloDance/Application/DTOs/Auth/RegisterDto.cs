@@ -15,6 +15,9 @@ namespace ValikuloDance.Application.DTOs.Auth
         [StringLength(100, MinimumLength = 6, ErrorMessage = "Пароль должен содержать минимум 6 символов")]
         public required string Password { get; set; }
 
+        [Required(ErrorMessage = "Telegram username обязателен")]
+        [RegularExpression(@"^@?[A-Za-z][A-Za-z0-9_]{4,31}$",
+            ErrorMessage = "Введите Telegram username: 5-32 символа, латиница, цифры и _, можно с @")]
         public required string TelegramUsername { get; set; }
     }
 }
