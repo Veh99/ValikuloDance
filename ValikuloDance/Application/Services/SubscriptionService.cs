@@ -479,6 +479,9 @@ namespace ValikuloDance.Application.Services
                 CreatedAt = DateTime.UtcNow
             };
 
+            var executionStrategy = _context.Database.CreateExecutionStrategy();
+            return await executionStrategy.ExecuteAsync(async () =>
+            {
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             _context.Bookings.Add(booking);
@@ -506,6 +509,7 @@ namespace ValikuloDance.Application.Services
 
             await transaction.CommitAsync();
             return MapBookingResponse(bookingForNotification);
+            });
         }
 
         public async Task EnsureSubscriptionPlansSyncedAsync()

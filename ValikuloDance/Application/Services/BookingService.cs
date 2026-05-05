@@ -103,6 +103,9 @@ namespace ValikuloDance.Application.Services
                 PriceAtBooking = bookingPrice
             };
 
+            var executionStrategy = _context.Database.CreateExecutionStrategy();
+            return await executionStrategy.ExecuteAsync(async () =>
+            {
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             _context.Bookings.Add(booking);
@@ -134,6 +137,7 @@ namespace ValikuloDance.Application.Services
 
             await transaction.CommitAsync();
             return MapBookingResponse(bookingForNotification);
+            });
         }
 
         public async Task<List<AvailableDateResponse>> GetAvailableDatesAsync(Guid trainerId, Guid serviceId, int days = 14)
