@@ -6,7 +6,7 @@
         public string? Email { get; set; }
         public string? Phone { get; set; }
         public required string Name { get; set; }
-        public required string TelegramChatId { get; set; }
+        public string? TelegramChatId { get; set; }
         public required string TelegramUsername { get; set; }
         public required string Role { get; set; } = "Client";
         public DateTime? LastLoginAt { get; set; }
@@ -21,5 +21,6 @@
         public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
         public virtual ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
         public virtual ICollection<TelegramChatBinding> TelegramChatBindings { get; set; } = new List<TelegramChatBinding>();
+        public virtual ICollection<TelegramMessageDelivery> TelegramMessageDeliveries { get; set; } = new List<TelegramMessageDelivery>();
     }
 }

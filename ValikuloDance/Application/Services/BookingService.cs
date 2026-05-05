@@ -50,6 +50,8 @@ namespace ValikuloDance.Application.Services
             var service = await _context.Services.FindAsync(request.ServiceId)
                 ?? throw new KeyNotFoundException("Услуга не найдена");
 
+            await EnsureTrainerTelegramReadyAsync(trainer.UserId);
+
             if (service.IsPackage)
                 throw new InvalidOperationException("Абонементы нельзя бронировать как отдельное занятие. Сначала оформите заявку на абонемент.");
 
@@ -101,6 +103,8 @@ namespace ValikuloDance.Application.Services
                 PriceAtBooking = bookingPrice
             };
 
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
             _context.Bookings.Add(booking);
 
             if (user.HasLateCancellationPenalty && paymentMode == "Single")
@@ -122,7 +126,13 @@ namespace ValikuloDance.Application.Services
             var bookingForNotification = await LoadBookingAsync(booking.Id)
                 ?? throw new KeyNotFoundException("Запись не найдена после создания");
 
-            await _telegramService.SendBookingPendingAsync(bookingForNotification);
+            var notificationResult = await _telegramService.SendBookingPendingAsync(bookingForNotification);
+            if (!notificationResult.IsMessageTypeSent("BookingPendingTrainer"))
+            {
+                throw new InvalidOperationException("Не удалось отправить уведомление тренеру в Telegram. Запись не создана.");
+            }
+
+            await transaction.CommitAsync();
             return MapBookingResponse(bookingForNotification);
         }
 
@@ -535,6 +545,14 @@ namespace ValikuloDance.Application.Services
                 .Include(b => b.Service)
                 .Include(b => b.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .FirstOrDefaultAsync(b => b.Id == bookingId);
+        }
+
+        private async Task EnsureTrainerTelegramReadyAsync(Guid trainerUserId)
+        {
+            if (!await _telegramService.HasActiveChatBindingAsync(trainerUserId))
+            {
+                throw new InvalidOperationException("Тренер ещё не подключил Telegram-бота. Запись временно недоступна.");
+            }
         }
 
         private async Task<Trainer> GetTrainerForCurrentUserAsync(ClaimsPrincipal userClaims)

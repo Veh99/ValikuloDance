@@ -12,10 +12,12 @@ namespace ValikuloDance.Api.Controllers
     public class TelegramController : ControllerBase
     {
         private readonly ITelegramService _telegramService;
+        private readonly IConfiguration _configuration;
 
-        public TelegramController(ITelegramService telegramService)
+        public TelegramController(ITelegramService telegramService, IConfiguration configuration)
         {
             _telegramService = telegramService;
+            _configuration = configuration;
         }
 
         [Authorize]
@@ -41,6 +43,16 @@ namespace ValikuloDance.Api.Controllers
         [HttpPost("webhook")]
         public async Task<IActionResult> Webhook([FromBody] Update update)
         {
+            var configuredSecret = _configuration["Telegram:WebhookSecretToken"];
+            if (string.IsNullOrWhiteSpace(configuredSecret))
+                return NotFound();
+
+            if (!Request.Headers.TryGetValue("X-Telegram-Bot-Api-Secret-Token", out var providedSecret) ||
+                providedSecret != configuredSecret)
+            {
+                return Unauthorized();
+            }
+
             await _telegramService.HandleUpdateAsync(update);
             return Ok();
         }

@@ -9,6 +9,7 @@ namespace ValikuloDance.Application.Interfaces
         Task<AuthResponseDto> LoginAsync(LoginDto loginDto);
         Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenDto refreshTokenDto);
         Task<bool> ChangePasswordAsync(Guid userId, ChangePasswordDto changePasswordDto);
+        Task<UserDto> UpdateTelegramUsernameAsync(Guid userId, UpdateTelegramUsernameDto updateTelegramUsernameDto);
         Task LogoutAsync(Guid userId);
         Task<User?> GetUserByPhone(string phoneNumber);
     }

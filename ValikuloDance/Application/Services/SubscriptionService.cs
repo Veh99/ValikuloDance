@@ -424,6 +424,8 @@ namespace ValikuloDance.Application.Services
                 .FirstOrDefaultAsync(x => x.Id == request.GroupLessonSlotId && x.IsActive)
                 ?? throw new KeyNotFoundException("Групповой слот не найден.");
 
+            await EnsureTrainerTelegramReadyAsync(slot.Trainer.UserId);
+
             if (!AllowedGroupDays.Contains(slot.StartTime.DayOfWeek))
                 throw new InvalidOperationException("Для групповых занятий доступны только вторник, четверг и суббота.");
 
@@ -477,6 +479,8 @@ namespace ValikuloDance.Application.Services
                 CreatedAt = DateTime.UtcNow
             };
 
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
             _context.Bookings.Add(booking);
 
             if (user.HasLateCancellationPenalty && paymentMode == "Single")
@@ -494,7 +498,13 @@ namespace ValikuloDance.Application.Services
                 .Include(x => x.Subscription).ThenInclude(s => s!.SubscriptionPlan)
                 .FirstAsync(x => x.Id == booking.Id);
 
-            await _telegramService.SendBookingPendingAsync(bookingForNotification);
+            var notificationResult = await _telegramService.SendBookingPendingAsync(bookingForNotification);
+            if (!notificationResult.IsMessageTypeSent("BookingPendingTrainer"))
+            {
+                throw new InvalidOperationException("Не удалось отправить уведомление тренеру в Telegram. Запись не создана.");
+            }
+
+            await transaction.CommitAsync();
             return MapBookingResponse(bookingForNotification);
         }
 
@@ -708,6 +718,14 @@ namespace ValikuloDance.Application.Services
                 SubscriptionPlanName = booking.Subscription?.SubscriptionPlan?.Name,
                 Notes = booking.Notes
             };
+        }
+
+        private async Task EnsureTrainerTelegramReadyAsync(Guid trainerUserId)
+        {
+            if (!await _telegramService.HasActiveChatBindingAsync(trainerUserId))
+            {
+                throw new InvalidOperationException("Тренер ещё не подключил Telegram-бота. Запись временно недоступна.");
+            }
         }
 
         private static bool CanBeCancelledByUser(Booking booking)

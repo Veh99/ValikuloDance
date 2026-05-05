@@ -56,11 +56,10 @@ namespace ValikuloDance.Application.Services
 
                     foreach (var update in updates)
                     {
-                        offset = update.Id + 1;
-
                         using var scope = _serviceProvider.CreateScope();
                         var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
                         await telegramService.HandleUpdateAsync(update);
+                        offset = update.Id + 1;
                     }
                 }
                 catch (OperationCanceledException)

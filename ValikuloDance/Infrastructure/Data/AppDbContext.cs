@@ -18,6 +18,7 @@ namespace ValikuloDance.Infrastructure.Data
         public DbSet<GroupLessonSlot> GroupLessonSlots { get; set; }
         public DbSet<ScheduleSlot> ScheduleSlots { get; set; }
         public DbSet<TelegramChatBinding> TelegramChatBindings { get; set; }
+        public DbSet<TelegramMessageDelivery> TelegramMessageDeliveries { get; set; }
         public DbSet<TrainerWorkingHour> TrainerWorkingHours { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -255,6 +256,45 @@ namespace ValikuloDance.Infrastructure.Data
 
                 entity.Property(e => e.TelegramUsername)
                     .HasMaxLength(50);
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(e => e.IsDeleted)
+                    .HasDefaultValue(false);
+            });
+
+            modelBuilder.Entity<TelegramMessageDelivery>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.TelegramMessageDeliveries)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(e => new { e.Status, e.CreatedAt });
+                entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+                entity.HasIndex(e => e.RelatedEntityId);
+
+                entity.Property(e => e.RecipientChatId)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.RecipientLogValue)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.MessageType)
+                    .IsRequired()
+                    .HasMaxLength(80);
+
+                entity.Property(e => e.Status)
+                    .IsRequired()
+                    .HasMaxLength(30);
+
+                entity.Property(e => e.ErrorMessage)
+                    .HasMaxLength(1000);
 
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");

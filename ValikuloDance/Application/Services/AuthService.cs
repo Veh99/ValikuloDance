@@ -48,7 +48,7 @@ namespace ValikuloDance.Application.Services
                 Phone = null,
                 Email = string.IsNullOrWhiteSpace(registerDto.Email) ? null : registerDto.Email.Trim(),
                 TelegramUsername = telegramUsername,
-                TelegramChatId = telegramUsername,
+                TelegramChatId = null,
                 Role = "Client",
                 CreatedAt = DateTime.UtcNow,
                 PasswordHash = passwordHash,
@@ -196,6 +196,73 @@ namespace ValikuloDance.Application.Services
             return true;
         }
 
+        public async Task<UserDto> UpdateTelegramUsernameAsync(Guid userId, UpdateTelegramUsernameDto updateTelegramUsernameDto)
+        {
+            var user = await _context.Users.FindAsync(userId)
+                ?? throw new InvalidOperationException("Пользователь не найден");
+
+            var normalizedTelegramUsername = NormalizeTelegramUsername(updateTelegramUsernameDto.TelegramUsername);
+            var withAt = "@" + normalizedTelegramUsername;
+
+            var usernameBelongsToAnotherUser = await _context.Users.AnyAsync(u =>
+                u.Id != userId &&
+                !u.IsDeleted &&
+                (EF.Functions.ILike(u.TelegramUsername, normalizedTelegramUsername) ||
+                 EF.Functions.ILike(u.TelegramUsername, withAt)));
+
+            if (usernameBelongsToAnotherUser)
+            {
+                throw new InvalidOperationException("Пользователь с таким Telegram username уже существует");
+            }
+
+            var oldTelegramUsername = NormalizeTelegramUsername(user.TelegramUsername);
+            var usernameChanged = !string.Equals(oldTelegramUsername, normalizedTelegramUsername, StringComparison.OrdinalIgnoreCase);
+
+            user.TelegramUsername = normalizedTelegramUsername;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            var bindings = await _context.TelegramChatBindings
+                .Where(x => x.UserId == userId && !x.IsDeleted)
+                .ToListAsync();
+
+            foreach (var binding in bindings)
+            {
+                binding.TelegramUsername = normalizedTelegramUsername;
+                binding.UpdatedAt = DateTime.UtcNow;
+
+                if (usernameChanged)
+                {
+                    binding.IsActive = false;
+                    binding.LastVerifiedAt = null;
+                }
+            }
+
+            if (usernameChanged)
+            {
+                user.TelegramChatId = null;
+            }
+
+            await _context.SaveChangesAsync();
+
+            var trainer = await _context.Trainers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.UserId == user.Id && t.IsActive);
+
+            return new UserDto
+            {
+                Id = user.Id,
+                Name = user.Name,
+                Phone = user.Phone,
+                Email = user.Email,
+                Role = user.Role,
+                TelegramUsername = user.TelegramUsername,
+                IsTrainer = trainer != null,
+                TrainerId = trainer?.Id,
+                CreatedAt = user.CreatedAt,
+                LastLoginAt = user.LastLoginAt
+            };
+        }
+
         public async Task LogoutAsync(Guid userId)
         {
             var user = await _context.Users.FindAsync(userId);
@@ -217,5 +284,10 @@ namespace ValikuloDance.Application.Services
             }
             return null;
         } 
+
+        private static string NormalizeTelegramUsername(string telegramUsername)
+        {
+            return telegramUsername.Trim().TrimStart('@');
+        }
     }
 }

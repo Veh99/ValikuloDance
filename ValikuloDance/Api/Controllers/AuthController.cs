@@ -115,6 +115,43 @@ namespace ValikuloDance.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// Смена Telegram username текущего пользователя
+        /// </summary>
+        [HttpPatch("telegram-username")]
+        [Authorize]
+        public async Task<IActionResult> UpdateTelegramUsername([FromBody] UpdateTelegramUsernameDto updateTelegramUsernameDto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                var userIdClaim = User.FindFirstValue("userId")
+                    ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
+                    ?? User.FindFirstValue("sub");
+
+                if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                    return Unauthorized(new { message = "Пользователь не авторизован" });
+
+                var user = await _authService.UpdateTelegramUsernameAsync(userId, updateTelegramUsernameDto);
+                return Ok(new
+                {
+                    message = "Telegram username обновлен. Если вы меняли аккаунт Telegram, запустите бота и нажмите Start заново.",
+                    user
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при смене Telegram username");
+                return StatusCode(500, new { message = "Внутренняя ошибка сервера" });
+            }
+        }
+
         [HttpGet("get-user-by-phone")]
         public async Task<IActionResult> GetUserId(string phoneNumber)
         {

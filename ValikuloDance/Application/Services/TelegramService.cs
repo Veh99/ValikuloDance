@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
 using ValikuloDance.Api.Settings;
+using ValikuloDance.Application.DTOs.Telegram;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
 using ValikuloDance.Infrastructure.Data;
@@ -76,12 +78,13 @@ namespace ValikuloDance.Application.Services
             }
         }
 
-        public async Task SendBookingPendingAsync(Booking booking)
+        public async Task<TelegramNotificationResult> SendBookingPendingAsync(Booking booking)
         {
+            var result = new TelegramNotificationResult();
             try
             {
                 if (booking?.User == null)
-                    return;
+                    return result;
 
                 var localStartTime = ConvertToMoscowTime(booking.StartTime);
                 var dateStr = localStartTime.ToString("dd.MM.yyyy");
@@ -113,7 +116,11 @@ namespace ValikuloDance.Application.Services
                     Статус: Ожидает подтверждения
                     """;
 
-                    await SendMessageAsync(userRecipient, userMessage);
+                    result.Sends.Add(await SendMessageAsync(userRecipient, userMessage, "BookingPendingUser", booking.Id));
+                }
+                else
+                {
+                    result.Sends.Add(TelegramSendResult.MissingRecipient("Пользователь не привязал Telegram через /start."));
                 }
 
                 if (booking.Trainer?.User != null)
@@ -145,22 +152,30 @@ namespace ValikuloDance.Application.Services
                             }
                         });
 
-                        await SendMessageAsync(trainerRecipient, trainerMessage, keyboard);
+                        result.Sends.Add(await SendMessageAsync(trainerRecipient, trainerMessage, "BookingPendingTrainer", booking.Id, keyboard));
+                    }
+                    else
+                    {
+                        result.Sends.Add(TelegramSendResult.MissingRecipient("Тренер не привязал Telegram через /start."));
                     }
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при отправке уведомления о новой заявке {BookingId}", booking?.Id);
+                result.Sends.Add(new TelegramSendResult { Success = false, RecipientConfigured = true, ErrorMessage = ex.Message });
             }
+
+            return result;
         }
 
-        public async Task SendBookingConfirmationAsync(Booking booking)
+        public async Task<TelegramNotificationResult> SendBookingConfirmationAsync(Booking booking)
         {
+            var result = new TelegramNotificationResult();
             try
             {
                 if (booking?.User == null)
-                    return;
+                    return result;
 
                 var localStartTime = ConvertToMoscowTime(booking.StartTime);
                 var dateStr = localStartTime.ToString("dd.MM.yyyy");
@@ -188,21 +203,29 @@ namespace ValikuloDance.Application.Services
                     Статус: Подтверждено
                     """;
 
-                    await SendMessageAsync(userRecipient, userMessage);
+                    result.Sends.Add(await SendMessageAsync(userRecipient, userMessage, "BookingConfirmationUser", booking.Id));
+                }
+                else
+                {
+                    result.Sends.Add(TelegramSendResult.MissingRecipient("Пользователь не привязал Telegram через /start."));
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при отправке подтверждения записи {BookingId}", booking?.Id);
+                result.Sends.Add(new TelegramSendResult { Success = false, RecipientConfigured = true, ErrorMessage = ex.Message });
             }
+
+            return result;
         }
 
-        public async Task SendBookingReminderAsync(Booking booking)
+        public async Task<TelegramNotificationResult> SendBookingReminderAsync(Booking booking)
         {
+            var result = new TelegramNotificationResult();
             try
             {
                 if (booking?.User == null)
-                    return;
+                    return result;
 
                 var recipient = await ResolveRecipientAsync(
                     booking.User.Id,
@@ -210,7 +233,10 @@ namespace ValikuloDance.Application.Services
                     booking.User.TelegramUsername);
 
                 if (recipient == null)
-                    return;
+                {
+                    result.Sends.Add(TelegramSendResult.MissingRecipient("Пользователь не привязал Telegram через /start."));
+                    return result;
+                }
 
                 var localStartTime = ConvertToMoscowTime(booking.StartTime);
                 var message = $"""
@@ -219,20 +245,24 @@ namespace ValikuloDance.Application.Services
                 Сегодня в {localStartTime:HH:mm} у вас занятие {booking.Service?.Name} с тренером {booking.Trainer?.User?.Name}.
                 """;
 
-                await SendMessageAsync(recipient, message);
+                result.Sends.Add(await SendMessageAsync(recipient, message, "BookingReminderUser", booking.Id));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при отправке напоминания");
+                result.Sends.Add(new TelegramSendResult { Success = false, RecipientConfigured = true, ErrorMessage = ex.Message });
             }
+
+            return result;
         }
 
-        public async Task SendBookingCancellationAsync(Booking booking)
+        public async Task<TelegramNotificationResult> SendBookingCancellationAsync(Booking booking)
         {
+            var result = new TelegramNotificationResult();
             try
             {
                 if (booking?.User == null)
-                    return;
+                    return result;
 
                 var userRecipient = await ResolveRecipientAsync(
                     booking.User.Id,
@@ -250,7 +280,7 @@ namespace ValikuloDance.Application.Services
                     Статус: Отменено
                     """;
 
-                    await SendMessageAsync(userRecipient, userMessage);
+                    result.Sends.Add(await SendMessageAsync(userRecipient, userMessage, "BookingCancellationUser", booking.Id));
                 }
 
                 if (booking.Trainer?.User != null)
@@ -268,18 +298,22 @@ namespace ValikuloDance.Application.Services
                         Клиент {booking.User.Name} отменил занятие {booking.Service?.Name} на {localStartTime:dd.MM.yyyy HH:mm}.
                         """;
 
-                        await SendMessageAsync(trainerRecipient, trainerMessage);
+                        result.Sends.Add(await SendMessageAsync(trainerRecipient, trainerMessage, "BookingCancellationTrainer", booking.Id));
                     }
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при отправке отмены записи");
+                result.Sends.Add(new TelegramSendResult { Success = false, RecipientConfigured = true, ErrorMessage = ex.Message });
             }
+
+            return result;
         }
 
-        public async Task SendSubscriptionRequestCreatedAsync(Subscription subscription)
+        public async Task<TelegramNotificationResult> SendSubscriptionRequestCreatedAsync(Subscription subscription)
         {
+            var result = new TelegramNotificationResult();
             var userRecipient = await ResolveRecipientAsync(
                 subscription.User.Id,
                 subscription.User.TelegramChatId,
@@ -301,7 +335,11 @@ namespace ValikuloDance.Application.Services
                 {paymentDetails}
                 """;
 
-                await SendMessageAsync(userRecipient, userMessage);
+                result.Sends.Add(await SendMessageAsync(userRecipient, userMessage, "SubscriptionRequestUser", subscription.Id));
+            }
+            else
+            {
+                result.Sends.Add(TelegramSendResult.MissingRecipient("Пользователь не привязал Telegram через /start."));
             }
 
             var approverRecipient = await ResolveApproverRecipientAsync();
@@ -328,19 +366,29 @@ namespace ValikuloDance.Application.Services
                     }
                 });
 
-                await SendMessageAsync(approverRecipient, approverMessage, keyboard);
+                result.Sends.Add(await SendMessageAsync(approverRecipient, approverMessage, "SubscriptionRequestApprover", subscription.Id, keyboard));
             }
+            else
+            {
+                result.Sends.Add(TelegramSendResult.MissingRecipient("Подтверждающий не привязан к Telegram или не настроен."));
+            }
+
+            return result;
         }
 
-        public async Task SendSubscriptionApprovedAsync(Subscription subscription)
+        public async Task<TelegramNotificationResult> SendSubscriptionApprovedAsync(Subscription subscription)
         {
+            var result = new TelegramNotificationResult();
             var recipient = await ResolveRecipientAsync(
                 subscription.User.Id,
                 subscription.User.TelegramChatId,
                 subscription.User.TelegramUsername);
 
             if (recipient == null)
-                return;
+            {
+                result.Sends.Add(TelegramSendResult.MissingRecipient("Пользователь не привязал Telegram через /start."));
+                return result;
+            }
 
             var expiresAtLocal = subscription.ExpiresAt.HasValue
                 ? ConvertToMoscowTime(subscription.ExpiresAt.Value).ToString("dd.MM.yyyy HH:mm")
@@ -355,18 +403,23 @@ namespace ValikuloDance.Application.Services
             Действует до: {expiresAtLocal}
             """;
 
-            await SendMessageAsync(recipient, message);
+            result.Sends.Add(await SendMessageAsync(recipient, message, "SubscriptionApprovedUser", subscription.Id));
+            return result;
         }
 
-        public async Task SendSubscriptionRejectedAsync(Subscription subscription)
+        public async Task<TelegramNotificationResult> SendSubscriptionRejectedAsync(Subscription subscription)
         {
+            var result = new TelegramNotificationResult();
             var recipient = await ResolveRecipientAsync(
                 subscription.User.Id,
                 subscription.User.TelegramChatId,
                 subscription.User.TelegramUsername);
 
             if (recipient == null)
-                return;
+            {
+                result.Sends.Add(TelegramSendResult.MissingRecipient("Пользователь не привязал Telegram через /start."));
+                return result;
+            }
 
             var message = $"""
             Заявка на абонемент отклонена
@@ -375,18 +428,23 @@ namespace ValikuloDance.Application.Services
             Причина: {subscription.RejectionReason ?? "Не указана"}
             """;
 
-            await SendMessageAsync(recipient, message);
+            result.Sends.Add(await SendMessageAsync(recipient, message, "SubscriptionRejectedUser", subscription.Id));
+            return result;
         }
 
-        public async Task SendSubscriptionExpiredAsync(Subscription subscription)
+        public async Task<TelegramNotificationResult> SendSubscriptionExpiredAsync(Subscription subscription)
         {
+            var result = new TelegramNotificationResult();
             var recipient = await ResolveRecipientAsync(
                 subscription.User.Id,
                 subscription.User.TelegramChatId,
                 subscription.User.TelegramUsername);
 
             if (recipient == null)
-                return;
+            {
+                result.Sends.Add(TelegramSendResult.MissingRecipient("Пользователь не привязал Telegram через /start."));
+                return result;
+            }
 
             var message = $"""
             Заявка на абонемент истекла
@@ -396,13 +454,22 @@ namespace ValikuloDance.Application.Services
             Если абонемент всё ещё нужен, оформите новую заявку на сайте.
             """;
 
-            await SendMessageAsync(recipient, message);
+            result.Sends.Add(await SendMessageAsync(recipient, message, "SubscriptionExpiredUser", subscription.Id));
+            return result;
         }
 
         public async Task UpsertChatBindingAsync(Guid userId, string telegramChatId, string? telegramUsername)
         {
             var normalizedChatId = telegramChatId.Trim();
             var normalizedUsername = NormalizeUsername(telegramUsername);
+
+            var existingChatBinding = await _context.TelegramChatBindings
+                .FirstOrDefaultAsync(x => x.TelegramChatId == normalizedChatId && !x.IsDeleted);
+
+            if (existingChatBinding != null && existingChatBinding.UserId != userId)
+            {
+                throw new InvalidOperationException("Этот Telegram чат уже привязан к другому пользователю.");
+            }
 
             var binding = await _context.TelegramChatBindings
                 .FirstOrDefaultAsync(x => x.UserId == userId && !x.IsDeleted);
@@ -430,6 +497,17 @@ namespace ValikuloDance.Application.Services
                 binding.IsDeleted = false;
                 binding.LastVerifiedAt = DateTime.UtcNow;
                 binding.UpdatedAt = DateTime.UtcNow;
+            }
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.TelegramChatId = normalizedChatId;
+                if (!string.IsNullOrWhiteSpace(normalizedUsername))
+                {
+                    user.TelegramUsername = normalizedUsername;
+                }
+                user.UpdatedAt = DateTime.UtcNow;
             }
 
             await _context.SaveChangesAsync();
@@ -642,20 +720,90 @@ namespace ValikuloDance.Application.Services
                 EF.Functions.ILike(u.TelegramUsername, withAt));
         }
 
-        private async Task SendMessageAsync(TelegramRecipient recipient, string message, InlineKeyboardMarkup? replyMarkup = null)
+        private async Task<TelegramSendResult> SendMessageAsync(
+            TelegramRecipient recipient,
+            string message,
+            string messageType,
+            Guid? relatedEntityId,
+            InlineKeyboardMarkup? replyMarkup = null)
         {
+            var delivery = new TelegramMessageDelivery
+            {
+                Id = Guid.NewGuid(),
+                UserId = recipient.UserId,
+                RecipientChatId = recipient.ChatId,
+                RecipientLogValue = recipient.LogValue,
+                MessageType = messageType,
+                RelatedEntityId = relatedEntityId,
+                Status = "Pending",
+                Attempts = 1,
+                CreatedAt = DateTime.UtcNow,
+                LastAttemptAt = DateTime.UtcNow
+            };
+
+            _context.TelegramMessageDeliveries.Add(delivery);
+
             try
             {
                 var chatId = long.TryParse(recipient.ChatId, out var numericChatId)
                     ? new ChatId(numericChatId)
                     : new ChatId(recipient.ChatId);
 
-                await _botClient.SendMessage(chatId: chatId, text: message, replyMarkup: replyMarkup);
+                var sentMessage = await _botClient.SendMessage(chatId: chatId, text: message, replyMarkup: replyMarkup);
+                delivery.Status = "Sent";
+                delivery.TelegramMessageId = sentMessage.MessageId;
+                delivery.SentAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
                 _logger.LogInformation("Telegram message sent to {TelegramRecipient}", recipient.LogValue);
+
+                return new TelegramSendResult
+                {
+                    Success = true,
+                    RecipientConfigured = true,
+                    MessageType = messageType,
+                    DeliveryId = delivery.Id,
+                    TelegramMessageId = sentMessage.MessageId
+                };
+            }
+            catch (ApiRequestException ex)
+            {
+                delivery.Status = "Failed";
+                delivery.ErrorCode = ex.ErrorCode;
+                delivery.ErrorMessage = ex.Message;
+
+                if (ShouldDeactivateBinding(ex.ErrorCode))
+                {
+                    await DeactivateChatBindingAsync(recipient.ChatId, ex.Message);
+                }
+
+                await _context.SaveChangesAsync();
+                _logger.LogError(ex, "Ошибка при отправке уведомления пользователю {TelegramRecipient}", recipient.LogValue);
+
+                return new TelegramSendResult
+                {
+                    Success = false,
+                    RecipientConfigured = true,
+                    MessageType = messageType,
+                    DeliveryId = delivery.Id,
+                    ErrorCode = ex.ErrorCode,
+                    ErrorMessage = ex.Message
+                };
             }
             catch (Exception ex)
             {
+                delivery.Status = "Failed";
+                delivery.ErrorMessage = ex.Message;
+                await _context.SaveChangesAsync();
                 _logger.LogError(ex, "Ошибка при отправке уведомления пользователю {TelegramRecipient}", recipient.LogValue);
+
+                return new TelegramSendResult
+                {
+                    Success = false,
+                    RecipientConfigured = true,
+                    MessageType = messageType,
+                    DeliveryId = delivery.Id,
+                    ErrorMessage = ex.Message
+                };
             }
         }
 
@@ -670,13 +818,14 @@ namespace ValikuloDance.Application.Services
             if (binding != null)
             {
                 return new TelegramRecipient(
+                    binding.UserId,
                     binding.TelegramChatId,
                     !string.IsNullOrWhiteSpace(binding.TelegramUsername) ? binding.TelegramUsername : binding.TelegramChatId);
             }
 
-            if (!string.IsNullOrWhiteSpace(fallbackChatId))
+            if (!string.IsNullOrWhiteSpace(fallbackChatId) && long.TryParse(fallbackChatId, out _))
             {
-                return new TelegramRecipient(fallbackChatId, fallbackUsername ?? fallbackChatId);
+                return new TelegramRecipient(userId, fallbackChatId, fallbackUsername ?? fallbackChatId);
             }
 
             return null;
@@ -687,6 +836,7 @@ namespace ValikuloDance.Application.Services
             if (!string.IsNullOrWhiteSpace(_subscriptionSettings.ApproverTelegramChatId))
             {
                 return new TelegramRecipient(
+                    null,
                     _subscriptionSettings.ApproverTelegramChatId.Trim(),
                     _subscriptionSettings.ApproverTelegramUsername ?? _subscriptionSettings.ApproverTelegramChatId.Trim());
             }
@@ -705,7 +855,7 @@ namespace ValikuloDance.Application.Services
                 return null;
             }
 
-            return new TelegramRecipient(binding.TelegramChatId, binding.TelegramUsername ?? binding.TelegramChatId);
+            return new TelegramRecipient(binding.UserId, binding.TelegramChatId, binding.TelegramUsername ?? binding.TelegramChatId);
         }
 
         private string BuildPaymentDetailsMessage()
@@ -777,6 +927,33 @@ namespace ValikuloDance.Application.Services
             }
         }
 
-        private sealed record TelegramRecipient(string ChatId, string LogValue);
+        private async Task DeactivateChatBindingAsync(string chatId, string reason)
+        {
+            var bindings = await _context.TelegramChatBindings
+                .Where(x => x.TelegramChatId == chatId && x.IsActive && !x.IsDeleted)
+                .ToListAsync();
+
+            foreach (var binding in bindings)
+            {
+                binding.IsActive = false;
+                binding.UpdatedAt = DateTime.UtcNow;
+            }
+
+            _logger.LogWarning("Telegram chat binding deactivated for {TelegramChatId}: {Reason}", chatId, reason);
+        }
+
+        private static bool ShouldDeactivateBinding(int errorCode)
+        {
+            return errorCode is 400 or 403;
+        }
+
+        public async Task<bool> HasActiveChatBindingAsync(Guid userId)
+        {
+            return await _context.TelegramChatBindings
+                .AsNoTracking()
+                .AnyAsync(x => x.UserId == userId && x.IsActive && !x.IsDeleted);
+        }
+
+        private sealed record TelegramRecipient(Guid? UserId, string ChatId, string LogValue);
     }
 }
