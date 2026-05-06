@@ -196,6 +196,53 @@ namespace ValikuloDance.Application.Services
             return true;
         }
 
+        public async Task<UserDto> UpdateEmailAsync(Guid userId, UpdateEmailDto updateEmailDto)
+        {
+            var user = await _context.Users.FindAsync(userId)
+                ?? throw new InvalidOperationException("Пользователь не найден");
+
+            var normalizedEmail = string.IsNullOrWhiteSpace(updateEmailDto.Email)
+                ? null
+                : updateEmailDto.Email.Trim().ToLowerInvariant();
+
+            if (!string.IsNullOrWhiteSpace(normalizedEmail))
+            {
+                var emailBelongsToAnotherUser = await _context.Users.AnyAsync(u =>
+                    u.Id != userId &&
+                    !u.IsDeleted &&
+                    u.Email != null &&
+                    EF.Functions.ILike(u.Email, normalizedEmail));
+
+                if (emailBelongsToAnotherUser)
+                {
+                    throw new InvalidOperationException("Пользователь с таким email уже существует");
+                }
+            }
+
+            user.Email = normalizedEmail;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            var trainer = await _context.Trainers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.UserId == user.Id && t.IsActive);
+
+            return new UserDto
+            {
+                Id = user.Id,
+                Name = user.Name,
+                Phone = user.Phone,
+                Email = user.Email,
+                Role = user.Role,
+                TelegramUsername = user.TelegramUsername,
+                IsTrainer = trainer != null,
+                TrainerId = trainer?.Id,
+                CreatedAt = user.CreatedAt,
+                LastLoginAt = user.LastLoginAt
+            };
+        }
+
         public async Task<UserDto> UpdateTelegramUsernameAsync(Guid userId, UpdateTelegramUsernameDto updateTelegramUsernameDto)
         {
             var user = await _context.Users.FindAsync(userId)

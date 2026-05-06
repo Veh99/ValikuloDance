@@ -116,6 +116,43 @@ namespace ValikuloDance.Api.Controllers
         }
 
         /// <summary>
+        /// Смена email текущего пользователя
+        /// </summary>
+        [HttpPatch("email")]
+        [Authorize]
+        public async Task<IActionResult> UpdateEmail([FromBody] UpdateEmailDto updateEmailDto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                var userIdClaim = User.FindFirstValue("userId")
+                    ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
+                    ?? User.FindFirstValue("sub");
+
+                if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                    return Unauthorized(new { message = "Пользователь не авторизован" });
+
+                var user = await _authService.UpdateEmailAsync(userId, updateEmailDto);
+                return Ok(new
+                {
+                    message = "Email обновлен",
+                    user
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при смене email");
+                return StatusCode(500, new { message = "Внутренняя ошибка сервера" });
+            }
+        }
+
+        /// <summary>
         /// Смена Telegram username текущего пользователя
         /// </summary>
         [HttpPatch("telegram-username")]
