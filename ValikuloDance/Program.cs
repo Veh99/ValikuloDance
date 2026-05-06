@@ -99,7 +99,7 @@ namespace ValikuloDance
             builder.Services.AddScoped<BookingService>();
             builder.Services.AddScoped<SubscriptionService>();
             builder.Services.AddScoped<ITelegramService, TelegramService>();
-            builder.Services.AddScoped<IEmailService, EmailService>();
+            builder.Services.AddHttpClient<IEmailService, EmailService>();
             builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.AddScoped<ITokenService, TokenService>();
