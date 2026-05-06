@@ -19,6 +19,7 @@ namespace ValikuloDance.Infrastructure.Data
         public DbSet<ScheduleSlot> ScheduleSlots { get; set; }
         public DbSet<TelegramChatBinding> TelegramChatBindings { get; set; }
         public DbSet<TelegramMessageDelivery> TelegramMessageDeliveries { get; set; }
+        public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
         public DbSet<TrainerWorkingHour> TrainerWorkingHours { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -295,6 +296,29 @@ namespace ValikuloDance.Infrastructure.Data
 
                 entity.Property(e => e.ErrorMessage)
                     .HasMaxLength(1000);
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(e => e.IsDeleted)
+                    .HasDefaultValue(false);
+            });
+
+            modelBuilder.Entity<PasswordResetToken>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.PasswordResetTokens)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.TokenHash).IsUnique();
+                entity.HasIndex(e => new { e.UserId, e.ExpiresAt });
+
+                entity.Property(e => e.TokenHash)
+                    .IsRequired()
+                    .HasMaxLength(128);
 
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");

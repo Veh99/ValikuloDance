@@ -2,6 +2,9 @@
 using ValikuloDance.Domain.Entities;
 using ValikuloDance.Infrastructure.Data;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
+using System.Web;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Api.Settings;
 using ValikuloDance.Application.DTOs.Auth;
@@ -13,18 +16,24 @@ namespace ValikuloDance.Application.Services
         private readonly AppDbContext _context;
         private readonly ITokenService _tokenService;
         private readonly IPasswordHasher _passwordHasher;
+        private readonly IEmailService _emailService;
         private readonly JwtSettings _jwtSettings;
+        private readonly FrontendSettings _frontendSettings;
 
         public AuthService(
             AppDbContext context,
             ITokenService tokenService,
             IPasswordHasher passwordHasher,
-            IOptions<JwtSettings> jwtSettings)
+            IEmailService emailService,
+            IOptions<JwtSettings> jwtSettings,
+            IOptions<FrontendSettings> frontendSettings)
         {
             _context = context;
             _tokenService = tokenService;
             _passwordHasher = passwordHasher;
+            _emailService = emailService;
             _jwtSettings = jwtSettings.Value;
+            _frontendSettings = frontendSettings.Value;
         }
 
         public async Task<AuthResponseDto> RegisterAsync(RegisterDto registerDto)
@@ -178,6 +187,79 @@ namespace ValikuloDance.Application.Services
                     LastLoginAt = user.LastLoginAt
                 }
             };
+        }
+
+        public async Task ForgotPasswordAsync(ForgotPasswordDto forgotPasswordDto)
+        {
+            var normalizedEmail = forgotPasswordDto.Email.Trim().ToLowerInvariant();
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email != null && EF.Functions.ILike(u.Email, normalizedEmail) && !u.IsDeleted);
+
+            if (user == null)
+            {
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+            var activeTokens = await _context.PasswordResetTokens
+                .Where(x => x.UserId == user.Id && x.UsedAt == null && x.ExpiresAt > now && !x.IsDeleted)
+                .ToListAsync();
+
+            foreach (var activeToken in activeTokens)
+            {
+                activeToken.IsDeleted = true;
+                activeToken.UpdatedAt = now;
+            }
+
+            var token = GeneratePasswordResetToken();
+            var tokenHash = HashPasswordResetToken(token);
+            var resetToken = new PasswordResetToken
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                TokenHash = tokenHash,
+                ExpiresAt = now.AddMinutes(30),
+                CreatedAt = now
+            };
+
+            _context.PasswordResetTokens.Add(resetToken);
+            await _context.SaveChangesAsync();
+
+            var resetUrl = BuildPasswordResetUrl(token);
+            await _emailService.SendPasswordResetEmailAsync(user.Email!, resetUrl);
+        }
+
+        public async Task ResetPasswordAsync(ResetPasswordDto resetPasswordDto)
+        {
+            var tokenHash = HashPasswordResetToken(resetPasswordDto.Token);
+            var now = DateTime.UtcNow;
+            var resetToken = await _context.PasswordResetTokens
+                .Include(x => x.User)
+                .FirstOrDefaultAsync(x => x.TokenHash == tokenHash && !x.IsDeleted);
+
+            if (resetToken == null || resetToken.UsedAt != null || resetToken.ExpiresAt <= now)
+            {
+                throw new InvalidOperationException("Ссылка восстановления пароля недействительна или истекла");
+            }
+
+            if (resetToken.AttemptsCount >= 5)
+            {
+                resetToken.IsDeleted = true;
+                resetToken.UpdatedAt = now;
+                await _context.SaveChangesAsync();
+                throw new InvalidOperationException("Превышено количество попыток восстановления пароля");
+            }
+
+            resetToken.AttemptsCount += 1;
+            resetToken.UsedAt = now;
+            resetToken.UpdatedAt = now;
+
+            resetToken.User.PasswordHash = _passwordHasher.HashPassword(resetPasswordDto.NewPassword);
+            resetToken.User.RefreshToken = null;
+            resetToken.User.RefreshTokenExpiryTime = null;
+            resetToken.User.UpdatedAt = now;
+
+            await _context.SaveChangesAsync();
         }
 
         public async Task<bool> ChangePasswordAsync(Guid userId, ChangePasswordDto changePasswordDto)
@@ -335,6 +417,26 @@ namespace ValikuloDance.Application.Services
         private static string NormalizeTelegramUsername(string telegramUsername)
         {
             return telegramUsername.Trim().TrimStart('@');
+        }
+
+        private static string GeneratePasswordResetToken()
+        {
+            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+                .Replace("+", "-", StringComparison.Ordinal)
+                .Replace("/", "_", StringComparison.Ordinal)
+                .TrimEnd('=');
+        }
+
+        private static string HashPasswordResetToken(string token)
+        {
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(token.Trim()));
+            return Convert.ToHexString(hash);
+        }
+
+        private string BuildPasswordResetUrl(string token)
+        {
+            var separator = _frontendSettings.ResetPasswordUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
+            return $"{_frontendSettings.ResetPasswordUrl}{separator}token={HttpUtility.UrlEncode(token)}";
         }
     }
 }

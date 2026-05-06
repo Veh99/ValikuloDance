@@ -90,6 +90,54 @@ namespace ValikuloDance.Api.Controllers
         }
 
         /// <summary>
+        /// Запрос ссылки для восстановления пароля
+        /// </summary>
+        [HttpPost("forgot-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto forgotPasswordDto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                await _authService.ForgotPasswordAsync(forgotPasswordDto);
+                return Ok(new { message = "Если email зарегистрирован, мы отправили ссылку для восстановления пароля" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при запросе восстановления пароля");
+                return Ok(new { message = "Если email зарегистрирован, мы отправили ссылку для восстановления пароля" });
+            }
+        }
+
+        /// <summary>
+        /// Сброс пароля по одноразовому токену
+        /// </summary>
+        [HttpPost("reset-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto resetPasswordDto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                await _authService.ResetPasswordAsync(resetPasswordDto);
+                return Ok(new { message = "Пароль успешно изменен" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при сбросе пароля");
+                return StatusCode(500, new { message = "Внутренняя ошибка сервера" });
+            }
+        }
+
+        /// <summary>
         /// Смена пароля
         /// </summary>
         [HttpPost("change-password")]

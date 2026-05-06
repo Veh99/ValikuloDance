@@ -22,5 +22,6 @@
         public virtual ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
         public virtual ICollection<TelegramChatBinding> TelegramChatBindings { get; set; } = new List<TelegramChatBinding>();
         public virtual ICollection<TelegramMessageDelivery> TelegramMessageDeliveries { get; set; } = new List<TelegramMessageDelivery>();
+        public virtual ICollection<PasswordResetToken> PasswordResetTokens { get; set; } = new List<PasswordResetToken>();
     }
 }
