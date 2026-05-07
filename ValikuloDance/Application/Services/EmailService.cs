@@ -26,13 +26,37 @@ namespace ValikuloDance.Application.Services
 
         public async Task SendPasswordResetEmailAsync(string toEmail, string resetUrl)
         {
-            if (string.Equals(_settings.Provider, "CustomerIo", StringComparison.OrdinalIgnoreCase))
+            try
+            {
+                await SendPasswordResetEmailWithProviderAsync(_settings.Provider, toEmail, resetUrl);
+            }
+            catch (Exception ex) when (!string.IsNullOrWhiteSpace(_settings.FallbackProvider))
+            {
+                _logger.LogError(
+                    ex,
+                    "Password reset email failed with provider {Provider}. Trying fallback provider {FallbackProvider}.",
+                    _settings.Provider,
+                    _settings.FallbackProvider);
+
+                await SendPasswordResetEmailWithProviderAsync(_settings.FallbackProvider, toEmail, resetUrl);
+            }
+        }
+
+        private async Task SendPasswordResetEmailWithProviderAsync(string? provider, string toEmail, string resetUrl)
+        {
+            if (string.Equals(provider, "CustomerIo", StringComparison.OrdinalIgnoreCase))
             {
                 await SendPasswordResetEmailWithCustomerIoAsync(toEmail, resetUrl);
                 return;
             }
 
-            await SendPasswordResetEmailWithSmtpAsync(toEmail, resetUrl);
+            if (string.Equals(provider, "Smtp", StringComparison.OrdinalIgnoreCase))
+            {
+                await SendPasswordResetEmailWithSmtpAsync(toEmail, resetUrl);
+                return;
+            }
+
+            throw new InvalidOperationException($"Unsupported email provider: {provider}");
         }
 
         private async Task SendPasswordResetEmailWithCustomerIoAsync(string toEmail, string resetUrl)
