@@ -44,6 +44,7 @@ namespace ValikuloDance.Application.Services
             var trainer = await _context.Trainers
                 .Include(t => t.User)
                 .Include(t => t.WorkingHours.Where(w => w.IsActive))
+                .Include(t => t.ScheduleOverrides.Where(o => o.IsActive))
                 .FirstOrDefaultAsync(t => t.Id == request.TrainerId)
                 ?? throw new KeyNotFoundException("Тренер не найден");
 
@@ -78,6 +79,12 @@ namespace ValikuloDance.Application.Services
 
             var endTimeUtc = startTimeUtc.AddMinutes(service.DurationMinutes);
             await EnsureSlotsGeneratedAsync(trainer, startTimeUtc.Date, startTimeUtc.Date);
+
+            var timeZone = GetMoscowTimeZone();
+            var localStartDate = TimeZoneInfo.ConvertTimeFromUtc(startTimeUtc, timeZone).Date;
+            var availableStarts = await GetAvailableStartTimesForDateAsync(trainer, localStartDate, service.DurationMinutes);
+            if (!availableStarts.Contains(startTimeUtc))
+                throw new InvalidOperationException("Р’С‹Р±СЂР°РЅРЅРѕРµ РІСЂРµРјСЏ РЅРµРґРѕСЃС‚СѓРїРЅРѕ");
 
             var slotsToBook = await GetBookableSlotsAsync(trainer.Id, startTimeUtc, endTimeUtc);
             if (slotsToBook.Count == 0)
@@ -149,6 +156,7 @@ namespace ValikuloDance.Application.Services
 
             var trainer = await _context.Trainers
                 .Include(t => t.WorkingHours.Where(w => w.IsActive))
+                .Include(t => t.ScheduleOverrides.Where(o => o.IsActive))
                 .FirstOrDefaultAsync(t => t.Id == trainerId)
                 ?? throw new KeyNotFoundException("Тренер не найден");
 
@@ -171,7 +179,7 @@ namespace ValikuloDance.Application.Services
 
             for (var localDate = todayLocal; localDate <= endDateLocal; localDate = localDate.AddDays(1))
             {
-                var startTimes = await GetAvailableStartTimesForDateAsync(trainer.Id, localDate, service.DurationMinutes);
+                var startTimes = await GetAvailableStartTimesForDateAsync(trainer, localDate, service.DurationMinutes);
                 if (startTimes.Count == 0)
                     continue;
 
@@ -189,6 +197,7 @@ namespace ValikuloDance.Application.Services
         {
             var trainer = await _context.Trainers
                 .Include(t => t.WorkingHours.Where(w => w.IsActive))
+                .Include(t => t.ScheduleOverrides.Where(o => o.IsActive))
                 .FirstOrDefaultAsync(t => t.Id == trainerId)
                 ?? throw new KeyNotFoundException("Тренер не найден");
 
@@ -211,7 +220,7 @@ namespace ValikuloDance.Application.Services
                 TimeZoneInfo.ConvertTimeToUtc(localDate, timeZone).Date,
                 TimeZoneInfo.ConvertTimeToUtc(localDate, timeZone).Date);
 
-            var startTimes = await GetAvailableStartTimesForDateAsync(trainer.Id, localDate, service.DurationMinutes);
+            var startTimes = await GetAvailableStartTimesForDateAsync(trainer, localDate, service.DurationMinutes);
 
             return startTimes.Select(startTimeUtc => new AvailableSlotResponse
             {
@@ -384,7 +393,7 @@ namespace ValikuloDance.Application.Services
             }
         }
 
-        private async Task<List<DateTime>> GetAvailableStartTimesForDateAsync(Guid trainerId, DateTime localDate, int durationMinutes)
+        private async Task<List<DateTime>> GetAvailableStartTimesForDateAsync(Trainer trainer, DateTime localDate, int durationMinutes)
         {
             var timeZone = GetMoscowTimeZone();
             var dayStartUtc = TimeZoneInfo.ConvertTimeToUtc(localDate, timeZone);
@@ -392,7 +401,7 @@ namespace ValikuloDance.Application.Services
             var bookingDeadlineUtc = DateTime.UtcNow.AddHours(3);
 
             var slots = await _context.ScheduleSlots
-                .Where(s => s.TrainerId == trainerId && s.StartTime >= dayStartUtc && s.StartTime < nextDayStartUtc)
+                .Where(s => s.TrainerId == trainer.Id && s.StartTime >= dayStartUtc && s.StartTime < nextDayStartUtc)
                 .OrderBy(s => s.StartTime)
                 .ToListAsync();
 
@@ -407,6 +416,9 @@ namespace ValikuloDance.Application.Services
                     continue;
 
                 var requestedEnd = slot.StartTime.AddMinutes(durationMinutes);
+                if (!IsRangeAllowedByCurrentSchedule(trainer, slot.StartTime, requestedEnd, timeZone))
+                    continue;
+
                 var candidateSlots = slots
                     .Where(s => s.StartTime >= slot.StartTime && s.StartTime < requestedEnd)
                     .OrderBy(s => s.StartTime)
@@ -457,15 +469,33 @@ namespace ValikuloDance.Application.Services
             return cursor >= requestedEnd;
         }
 
+        private static bool IsRangeAllowedByCurrentSchedule(Trainer trainer, DateTime startTimeUtc, DateTime endTimeUtc, TimeZoneInfo timeZone)
+        {
+            var localStart = TimeZoneInfo.ConvertTimeFromUtc(startTimeUtc, timeZone);
+            var localEnd = TimeZoneInfo.ConvertTimeFromUtc(endTimeUtc, timeZone);
+            if (localStart.Date != localEnd.Date)
+                return false;
+
+            var date = localStart.Date;
+            var overrides = GetOverridesForDate(trainer, date);
+            if (overrides.Any(o => IsOverrideType(o, "DayOff")))
+                return false;
+
+            var start = localStart.TimeOfDay;
+            var end = localEnd.TimeOfDay;
+            var availableRanges = GetAvailabilityRangesForDate(trainer, date);
+            var isInsideAvailableRange = availableRanges.Any(r => start >= r.Start && end <= r.End);
+            if (!isInsideAvailableRange)
+                return false;
+
+            return !GetUnavailableRangesForDate(trainer, date).Any(r => RangesOverlap(start, end, r.Start, r.End));
+        }
+
         private async Task EnsureSlotsGeneratedAsync(Trainer trainer, DateTime utcStartDate, DateTime utcEndDate)
         {
             var timeZone = GetMoscowTimeZone();
             var localStartDate = TimeZoneInfo.ConvertTimeFromUtc(utcStartDate, timeZone).Date;
             var localEndDate = TimeZoneInfo.ConvertTimeFromUtc(utcEndDate, timeZone).Date;
-
-            var workingHours = trainer.WorkingHours.Where(w => w.IsActive).ToList();
-            if (workingHours.Count == 0)
-                workingHours = DefaultWorkingHours.ToList();
 
             var generationWindowStartUtc = TimeZoneInfo.ConvertTimeToUtc(localStartDate, timeZone);
             var generationWindowEndUtc = TimeZoneInfo.ConvertTimeToUtc(localEndDate.AddDays(1), timeZone);
@@ -483,20 +513,30 @@ namespace ValikuloDance.Application.Services
 
             for (var localDate = localStartDate; localDate <= localEndDate; localDate = localDate.AddDays(1))
             {
-                var hoursForDay = workingHours
-                    .Where(w => w.DayOfWeek == localDate.DayOfWeek)
+                var dayOverrides = GetOverridesForDate(trainer, localDate);
+                if (dayOverrides.Any(o => IsOverrideType(o, "DayOff")))
+                    continue;
+
+                var unavailableRanges = GetUnavailableRangesForDate(trainer, localDate);
+                var hoursForDay = GetAvailabilityRangesForDate(trainer, localDate)
                     .ToList();
 
                 foreach (var hours in hoursForDay)
                 {
-                    var localCursor = localDate.Add(hours.StartTimeLocal);
-                    var localEnd = localDate.Add(hours.EndTimeLocal);
+                    var localCursor = localDate.Add(hours.Start);
+                    var localEnd = localDate.Add(hours.End);
 
                     while (localCursor < localEnd)
                     {
                         var slotEndLocal = localCursor.AddMinutes(hours.SlotDurationMinutes);
                         if (slotEndLocal > localEnd)
                             break;
+
+                        if (unavailableRanges.Any(r => RangesOverlap(localCursor.TimeOfDay, slotEndLocal.TimeOfDay, r.Start, r.End)))
+                        {
+                            localCursor = slotEndLocal;
+                            continue;
+                        }
 
                         var slotStartUtc = TimeZoneInfo.ConvertTimeToUtc(
                             DateTime.SpecifyKind(localCursor, DateTimeKind.Unspecified),
@@ -529,6 +569,49 @@ namespace ValikuloDance.Application.Services
 
             if (slotsAdded)
                 await _context.SaveChangesAsync();
+        }
+
+        private static List<(TimeSpan Start, TimeSpan End, int SlotDurationMinutes)> GetAvailabilityRangesForDate(Trainer trainer, DateTime localDate)
+        {
+            var workingHours = trainer.WorkingHours.Where(w => w.IsActive).ToList();
+            if (workingHours.Count == 0)
+                workingHours = DefaultWorkingHours.ToList();
+
+            var ranges = workingHours
+                .Where(w => w.DayOfWeek == localDate.DayOfWeek)
+                .Select(w => (w.StartTimeLocal, w.EndTimeLocal, w.SlotDurationMinutes))
+                .ToList();
+
+            ranges.AddRange(GetOverridesForDate(trainer, localDate)
+                .Where(o => IsOverrideType(o, "Available") && o.StartTimeLocal != null && o.EndTimeLocal != null)
+                .Select(o => (o.StartTimeLocal!.Value, o.EndTimeLocal!.Value, o.SlotDurationMinutes ?? 15)));
+
+            return ranges;
+        }
+
+        private static List<(TimeSpan Start, TimeSpan End)> GetUnavailableRangesForDate(Trainer trainer, DateTime localDate)
+        {
+            return GetOverridesForDate(trainer, localDate)
+                .Where(o => IsOverrideType(o, "Unavailable") && o.StartTimeLocal != null && o.EndTimeLocal != null)
+                .Select(o => (o.StartTimeLocal!.Value, o.EndTimeLocal!.Value))
+                .ToList();
+        }
+
+        private static List<TrainerScheduleOverride> GetOverridesForDate(Trainer trainer, DateTime localDate)
+        {
+            return trainer.ScheduleOverrides
+                .Where(o => o.IsActive && o.Date.Date == localDate.Date)
+                .ToList();
+        }
+
+        private static bool IsOverrideType(TrainerScheduleOverride scheduleOverride, string type)
+        {
+            return string.Equals(scheduleOverride.Type, type, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool RangesOverlap(TimeSpan firstStart, TimeSpan firstEnd, TimeSpan secondStart, TimeSpan secondEnd)
+        {
+            return firstStart < secondEnd && secondStart < firstEnd;
         }
 
         private async Task<Booking?> GetBookingAsync(Guid bookingId, Guid userId)

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ValikuloDance.Infrastructure.Data;
@@ -11,9 +12,11 @@ using ValikuloDance.Infrastructure.Data;
 namespace ValikuloDance.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260508072943_TrainerScheduleOverrides")]
+    partial class TrainerScheduleOverrides
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -311,7 +314,7 @@ namespace ValikuloDance.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime?>("PaymentDeadlineAt")
+                    b.Property<DateTime>("PaymentDeadlineAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("RejectedAt")

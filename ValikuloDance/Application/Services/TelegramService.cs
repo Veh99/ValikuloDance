@@ -345,7 +345,9 @@ namespace ValikuloDance.Application.Services
             var approverRecipient = await ResolveApproverRecipientAsync();
             if (approverRecipient != null)
             {
-                var deadline = ConvertToMoscowTime(subscription.PaymentDeadlineAt);
+                var deadline = subscription.PaymentDeadlineAt.HasValue
+                    ? ConvertToMoscowTime(subscription.PaymentDeadlineAt.Value).ToString("dd.MM.yyyy HH:mm")
+                    : "без срока";
                 var approverMessage = $"""
                 Новая заявка на абонемент
 
@@ -687,7 +689,9 @@ namespace ValikuloDance.Application.Services
                     _ => subscription.Status
                 };
 
-                var deadline = ConvertToMoscowTime(subscription.PaymentDeadlineAt);
+                var deadline = subscription.PaymentDeadlineAt.HasValue
+                    ? ConvertToMoscowTime(subscription.PaymentDeadlineAt.Value).ToString("dd.MM.yyyy HH:mm")
+                    : "без срока";
                 var updatedText = $"""
                 Заявка на абонемент
 

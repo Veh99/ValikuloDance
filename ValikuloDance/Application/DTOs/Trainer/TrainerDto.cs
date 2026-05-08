@@ -17,4 +17,32 @@
         public required string EndTimeLocal { get; set; }
         public int SlotDurationMinutes { get; set; } = 15;
     }
+
+    public class UpdateTrainerWorkingHoursRequest
+    {
+        public List<TrainerWorkingHourDto> WorkingHours { get; set; } = new();
+    }
+
+    public class TrainerScheduleOverrideDto
+    {
+        public Guid Id { get; set; }
+        public Guid TrainerId { get; set; }
+        public required DateTime Date { get; set; }
+        public string? StartTimeLocal { get; set; }
+        public string? EndTimeLocal { get; set; }
+        public required string Type { get; set; }
+        public int? SlotDurationMinutes { get; set; }
+        public string? Reason { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    public class UpsertTrainerScheduleOverrideRequest
+    {
+        public required DateTime Date { get; set; }
+        public string? StartTimeLocal { get; set; }
+        public string? EndTimeLocal { get; set; }
+        public required string Type { get; set; }
+        public int? SlotDurationMinutes { get; set; }
+        public string? Reason { get; set; }
+    }
 }

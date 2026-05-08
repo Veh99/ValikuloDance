@@ -99,7 +99,7 @@ namespace ValikuloDance.Application.Services
                 TotalSessions = plan.SessionsCount,
                 UsedSessions = 0,
                 RequestedAt = now,
-                PaymentDeadlineAt = now.AddHours(1),
+                PaymentDeadlineAt = null,
                 Status = "PendingPayment",
                 IsActive = true,
                 CreatedAt = now
@@ -258,7 +258,7 @@ namespace ValikuloDance.Application.Services
             var pending = await _context.Subscriptions
                 .Include(x => x.User)
                 .Include(x => x.SubscriptionPlan)
-                .Where(x => x.Status == "PendingPayment" && x.PaymentDeadlineAt <= now && x.IsActive)
+                .Where(x => x.Status == "PendingPayment" && x.PaymentDeadlineAt != null && x.PaymentDeadlineAt <= now && x.IsActive)
                 .ToListAsync();
 
             if (pending.Count == 0)
@@ -319,7 +319,7 @@ namespace ValikuloDance.Application.Services
             }
 
             var now = DateTime.UtcNow;
-            if (subscription.PaymentDeadlineAt <= now)
+            if (subscription.PaymentDeadlineAt != null && subscription.PaymentDeadlineAt <= now)
             {
                 subscription.Status = "Expired";
                 subscription.IsActive = false;

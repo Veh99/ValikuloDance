@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ValikuloDance.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using ValikuloDance.Application.DTOs.Trainer;
 using System.Reflection.Metadata;
 using ValikuloDance.Application.Interfaces;
@@ -26,6 +27,7 @@ public class TrainerController : ControllerBase
         var trainers = await _context.Trainers
             .Include(t => t.User)
             .Include(t => t.WorkingHours.Where(w => w.IsActive))
+            .Include(t => t.ScheduleOverrides.Where(o => o.IsActive))
             .Where(t => t.IsActive)
             .Select(t => new
             {
@@ -44,6 +46,16 @@ public class TrainerController : ControllerBase
                     w.StartTimeLocal,
                     w.EndTimeLocal,
                     w.SlotDurationMinutes
+                }),
+                ScheduleOverrides = t.ScheduleOverrides.Select(o => new
+                {
+                    o.Id,
+                    o.Date,
+                    o.StartTimeLocal,
+                    o.EndTimeLocal,
+                    o.Type,
+                    o.SlotDurationMinutes,
+                    o.Reason
                 })
             })
             .ToListAsync();
@@ -57,6 +69,7 @@ public class TrainerController : ControllerBase
         var trainer = await _context.Trainers
             .Include(t => t.User)
             .Include(t => t.WorkingHours.Where(w => w.IsActive))
+            .Include(t => t.ScheduleOverrides.Where(o => o.IsActive))
             .FirstOrDefaultAsync(t => t.Id == id && t.IsActive);
 
         if (trainer == null)
@@ -79,14 +92,64 @@ public class TrainerController : ControllerBase
                 w.StartTimeLocal,
                 w.EndTimeLocal,
                 w.SlotDurationMinutes
+            }),
+            ScheduleOverrides = trainer.ScheduleOverrides.Select(o => new
+            {
+                o.Id,
+                o.Date,
+                o.StartTimeLocal,
+                o.EndTimeLocal,
+                o.Type,
+                o.SlotDurationMinutes,
+                o.Reason
             })
         });
     }
 
     [HttpPost()]
+    [Authorize]
     public async Task<IActionResult> Add(TrainerDto request)
     {
         await _trainerService.Add(request);
         return Ok();
+    }
+
+    [HttpPut("{id}/working-hours")]
+    [Authorize]
+    public async Task<IActionResult> UpdateWorkingHours(Guid id, [FromBody] UpdateTrainerWorkingHoursRequest request)
+    {
+        var workingHours = await _trainerService.UpdateWorkingHoursAsync(id, request);
+        return Ok(workingHours);
+    }
+
+    [HttpGet("{id}/schedule-overrides")]
+    public async Task<IActionResult> GetScheduleOverrides(Guid id, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    {
+        var overrides = await _trainerService.GetScheduleOverridesAsync(id, from, to);
+        return Ok(overrides);
+    }
+
+    [HttpPost("{id}/schedule-overrides")]
+    [Authorize]
+    public async Task<IActionResult> CreateScheduleOverride(Guid id, [FromBody] UpsertTrainerScheduleOverrideRequest request)
+    {
+        var scheduleOverride = await _trainerService.CreateScheduleOverrideAsync(id, request);
+        return Ok(scheduleOverride);
+    }
+
+    [HttpPut("{id}/schedule-overrides/{overrideId}")]
+    [Authorize]
+    public async Task<IActionResult> UpdateScheduleOverride(Guid id, Guid overrideId, [FromBody] UpsertTrainerScheduleOverrideRequest request)
+    {
+        var scheduleOverride = await _trainerService.UpdateScheduleOverrideAsync(id, overrideId, request);
+        return Ok(scheduleOverride);
+    }
+
+    [HttpDelete("{id}/schedule-overrides/{overrideId}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteScheduleOverride(Guid id, Guid overrideId)
+    {
+        await _trainerService.DeleteScheduleOverrideAsync(id, overrideId);
+        return NoContent();
     }
 }

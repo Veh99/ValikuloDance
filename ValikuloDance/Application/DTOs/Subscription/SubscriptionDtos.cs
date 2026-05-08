@@ -30,7 +30,7 @@ namespace ValikuloDance.Application.DTOs.Subscription
         public required decimal Price { get; set; }
         public required string Status { get; set; }
         public required DateTime RequestedAt { get; set; }
-        public required DateTime PaymentDeadlineAt { get; set; }
+        public DateTime? PaymentDeadlineAt { get; set; }
         public DateTime? StartsAt { get; set; }
         public DateTime? ExpiresAt { get; set; }
         public string? RejectionReason { get; set; }

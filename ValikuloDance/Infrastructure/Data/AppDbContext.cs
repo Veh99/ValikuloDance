@@ -21,6 +21,7 @@ namespace ValikuloDance.Infrastructure.Data
         public DbSet<TelegramMessageDelivery> TelegramMessageDeliveries { get; set; }
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
         public DbSet<TrainerWorkingHour> TrainerWorkingHours { get; set; }
+        public DbSet<TrainerScheduleOverride> TrainerScheduleOverrides { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -114,6 +115,28 @@ namespace ValikuloDance.Infrastructure.Data
 
                 entity.HasIndex(e => new { e.TrainerId, e.DayOfWeek, e.StartTimeLocal, e.EndTimeLocal })
                     .IsUnique();
+            });
+
+            modelBuilder.Entity<TrainerScheduleOverride>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Trainer)
+                    .WithMany(t => t.ScheduleOverrides)
+                    .HasForeignKey(e => e.TrainerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.Property(e => e.Type)
+                    .IsRequired()
+                    .HasMaxLength(20);
+
+                entity.Property(e => e.Date)
+                    .HasColumnType("date");
+
+                entity.Property(e => e.Reason)
+                    .HasMaxLength(250);
+
+                entity.HasIndex(e => new { e.TrainerId, e.Date, e.IsActive });
             });
 
             modelBuilder.Entity<Service>(entity =>
