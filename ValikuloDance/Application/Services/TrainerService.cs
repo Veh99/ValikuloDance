@@ -50,18 +50,9 @@ namespace ValikuloDance.Application.Services
                 PhotoUrl = request.PhotoUrl ?? string.Empty,
             };
 
-            var workingHours = request.WorkingHours.Count > 0
-                ? request.WorkingHours.Select(hours => new TrainerWorkingHour
-                {
-                    Id = Guid.NewGuid(),
-                    TrainerId = entity.Id,
-                    DayOfWeek = hours.DayOfWeek,
-                    StartTimeLocal = TimeSpan.Parse(hours.StartTimeLocal),
-                    EndTimeLocal = TimeSpan.Parse(hours.EndTimeLocal),
-                    SlotDurationMinutes = hours.SlotDurationMinutes,
-                    CreatedAt = DateTime.UtcNow,
-                    IsActive = true
-                }).ToList()
+            var requestedWorkingHours = request.WorkingHours.Where(hours => hours.IsWorking).ToList();
+            var workingHours = requestedWorkingHours.Count > 0
+                ? requestedWorkingHours.Select(hours => CreateWorkingHour(entity.Id, hours)).ToList()
                 : Enumerable.Range(1, 6).Select(day => new TrainerWorkingHour
                 {
                     Id = Guid.NewGuid(),
@@ -95,6 +86,7 @@ namespace ValikuloDance.Application.Services
                 throw new InvalidOperationException("Добавьте хотя бы один рабочий интервал");
 
             var newWorkingHours = request.WorkingHours
+                .Where(hours => hours.IsWorking)
                 .Select(hours => CreateWorkingHour(trainer.Id, hours))
                 .ToList();
 
@@ -184,6 +176,9 @@ namespace ValikuloDance.Application.Services
 
         private static TrainerWorkingHour CreateWorkingHour(Guid trainerId, TrainerWorkingHourDto hours)
         {
+            if (string.IsNullOrWhiteSpace(hours.StartTimeLocal) || string.IsNullOrWhiteSpace(hours.EndTimeLocal))
+                throw new InvalidOperationException("Для рабочего дня укажите начало и конец интервала");
+
             var start = ParseTime(hours.StartTimeLocal, nameof(hours.StartTimeLocal));
             var end = ParseTime(hours.EndTimeLocal, nameof(hours.EndTimeLocal));
             ValidateTimeRange(start, end);
@@ -279,6 +274,7 @@ namespace ValikuloDance.Application.Services
             return new TrainerWorkingHourDto
             {
                 DayOfWeek = hours.DayOfWeek,
+                IsWorking = true,
                 StartTimeLocal = FormatTime(hours.StartTimeLocal),
                 EndTimeLocal = FormatTime(hours.EndTimeLocal),
                 SlotDurationMinutes = hours.SlotDurationMinutes

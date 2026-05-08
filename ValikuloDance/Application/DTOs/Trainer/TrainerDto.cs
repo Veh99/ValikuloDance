@@ -13,8 +13,9 @@
     public class TrainerWorkingHourDto
     {
         public required DayOfWeek DayOfWeek { get; set; }
-        public required string StartTimeLocal { get; set; }
-        public required string EndTimeLocal { get; set; }
+        public bool IsWorking { get; set; } = true;
+        public string? StartTimeLocal { get; set; }
+        public string? EndTimeLocal { get; set; }
         public int SlotDurationMinutes { get; set; } = 15;
     }
 
