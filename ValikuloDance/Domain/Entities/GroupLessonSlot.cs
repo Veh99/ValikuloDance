@@ -4,6 +4,7 @@ namespace ValikuloDance.Domain.Entities
     {
         public Guid ServiceId { get; set; }
         public Guid TrainerId { get; set; }
+        public Guid? GroupLessonScheduleId { get; set; }
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
         public int Capacity { get; set; }
@@ -11,6 +12,7 @@ namespace ValikuloDance.Domain.Entities
 
         public virtual Service Service { get; set; } = null!;
         public virtual Trainer Trainer { get; set; } = null!;
+        public virtual GroupLessonSchedule? GroupLessonSchedule { get; set; }
         public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
     }
 }

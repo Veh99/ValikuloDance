@@ -51,6 +51,7 @@ namespace ValikuloDance.Application.DTOs.Subscription
         public required Guid Id { get; set; }
         public required Guid ServiceId { get; set; }
         public required Guid TrainerId { get; set; }
+        public Guid? GroupLessonScheduleId { get; set; }
         public required string ServiceName { get; set; }
         public required string TrainerName { get; set; }
         public required DateTime StartTime { get; set; }
@@ -65,5 +66,26 @@ namespace ValikuloDance.Application.DTOs.Subscription
         public string PaymentMode { get; set; } = "Single";
         public Guid? SubscriptionId { get; set; }
         public string? Notes { get; set; }
+    }
+
+    public class GroupLessonScheduleResponse
+    {
+        public required Guid Id { get; set; }
+        public required Guid TrainerId { get; set; }
+        public required Guid ServiceId { get; set; }
+        public required string ServiceName { get; set; }
+        public required string TrainerName { get; set; }
+        public required DayOfWeek DayOfWeek { get; set; }
+        public required string StartTimeLocal { get; set; }
+        public required int Capacity { get; set; }
+        public required bool IsActive { get; set; }
+    }
+
+    public class UpsertGroupLessonScheduleRequest
+    {
+        public Guid ServiceId { get; set; }
+        public DayOfWeek DayOfWeek { get; set; }
+        public required string StartTimeLocal { get; set; }
+        public int? Capacity { get; set; }
     }
 }

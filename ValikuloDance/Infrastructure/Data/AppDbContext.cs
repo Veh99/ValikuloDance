@@ -16,6 +16,7 @@ namespace ValikuloDance.Infrastructure.Data
         public DbSet<Subscription> Subscriptions { get; set; }
         public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
         public DbSet<GroupLessonSlot> GroupLessonSlots { get; set; }
+        public DbSet<GroupLessonSchedule> GroupLessonSchedules { get; set; }
         public DbSet<ScheduleSlot> ScheduleSlots { get; set; }
         public DbSet<TelegramChatBinding> TelegramChatBindings { get; set; }
         public DbSet<TelegramMessageDelivery> TelegramMessageDeliveries { get; set; }
@@ -237,6 +238,30 @@ namespace ValikuloDance.Infrastructure.Data
                     .WithMany()
                     .HasForeignKey(e => e.TrainerId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.GroupLessonSchedule)
+                    .WithMany(s => s.GroupLessonSlots)
+                    .HasForeignKey(e => e.GroupLessonScheduleId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<GroupLessonSchedule>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Trainer)
+                    .WithMany(t => t.GroupLessonSchedules)
+                    .HasForeignKey(e => e.TrainerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Service)
+                    .WithMany()
+                    .HasForeignKey(e => e.ServiceId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => new { e.TrainerId, e.ServiceId, e.DayOfWeek, e.StartTimeLocal })
+                    .IsUnique()
+                    .HasFilter("\"IsDeleted\" = false");
             });
 
             modelBuilder.Entity<ScheduleSlot>(entity =>

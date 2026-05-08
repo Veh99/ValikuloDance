@@ -17,5 +17,6 @@
         public virtual ICollection<ScheduleSlot> ScheduleSlots { get; set; } = new List<ScheduleSlot>();
         public virtual ICollection<TrainerWorkingHour> WorkingHours { get; set; } = new List<TrainerWorkingHour>();
         public virtual ICollection<TrainerScheduleOverride> ScheduleOverrides { get; set; } = new List<TrainerScheduleOverride>();
+        public virtual ICollection<GroupLessonSchedule> GroupLessonSchedules { get; set; } = new List<GroupLessonSchedule>();
     }
 }

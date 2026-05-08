@@ -57,5 +57,85 @@ namespace ValikuloDance.Api.Controllers
             var subscriptions = await _subscriptionService.GetActiveSubscriptionsAsync(User, format);
             return Ok(subscriptions);
         }
+
+        [Authorize]
+        [HttpGet("my-group-schedules")]
+        public async Task<IActionResult> GetMyGroupSchedules()
+        {
+            try
+            {
+                var schedules = await _subscriptionService.GetMyGroupLessonSchedulesAsync(User);
+                return Ok(schedules);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        [Authorize]
+        [HttpPost("my-group-schedules")]
+        public async Task<IActionResult> CreateMyGroupSchedule([FromBody] UpsertGroupLessonScheduleRequest request)
+        {
+            try
+            {
+                var schedule = await _subscriptionService.CreateMyGroupLessonScheduleAsync(request, User);
+                return Ok(schedule);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        [Authorize]
+        [HttpPut("my-group-schedules/{scheduleId}")]
+        public async Task<IActionResult> UpdateMyGroupSchedule(Guid scheduleId, [FromBody] UpsertGroupLessonScheduleRequest request)
+        {
+            try
+            {
+                var schedule = await _subscriptionService.UpdateMyGroupLessonScheduleAsync(scheduleId, request, User);
+                return Ok(schedule);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        [Authorize]
+        [HttpDelete("my-group-schedules/{scheduleId}")]
+        public async Task<IActionResult> DeleteMyGroupSchedule(Guid scheduleId)
+        {
+            try
+            {
+                await _subscriptionService.DeleteMyGroupLessonScheduleAsync(scheduleId, User);
+                return NoContent();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
     }
 }

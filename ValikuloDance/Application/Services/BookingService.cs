@@ -408,6 +408,7 @@ namespace ValikuloDance.Application.Services
             if (slots.Count == 0)
                 return new List<DateTime>();
 
+            var groupBusyRanges = await GetGroupBusyRangesAsync(trainer.Id, dayStartUtc, nextDayStartUtc);
             var availableStarts = new List<DateTime>();
 
             foreach (var slot in slots.Where(IsSlotFree))
@@ -417,6 +418,9 @@ namespace ValikuloDance.Application.Services
 
                 var requestedEnd = slot.StartTime.AddMinutes(durationMinutes);
                 if (!IsRangeAllowedByCurrentSchedule(trainer, slot.StartTime, requestedEnd, timeZone))
+                    continue;
+
+                if (OverlapsAnyGroupBusyRange(slot.StartTime, requestedEnd, groupBusyRanges))
                     continue;
 
                 var candidateSlots = slots
@@ -435,6 +439,10 @@ namespace ValikuloDance.Application.Services
 
         private async Task<List<ScheduleSlot>> GetBookableSlotsAsync(Guid trainerId, DateTime startTimeUtc, DateTime endTimeUtc)
         {
+            var groupBusyRanges = await GetGroupBusyRangesAsync(trainerId, startTimeUtc.Date, endTimeUtc.Date.AddDays(1));
+            if (OverlapsAnyGroupBusyRange(startTimeUtc, endTimeUtc, groupBusyRanges))
+                return new List<ScheduleSlot>();
+
             var slots = await _context.ScheduleSlots
                 .Where(s => s.TrainerId == trainerId && s.StartTime < endTimeUtc && s.EndTime > startTimeUtc)
                 .OrderBy(s => s.StartTime)
@@ -444,6 +452,24 @@ namespace ValikuloDance.Application.Services
                 return new List<ScheduleSlot>();
 
             return slots;
+        }
+
+        private async Task<List<(DateTime Start, DateTime End)>> GetGroupBusyRangesAsync(Guid trainerId, DateTime startTimeUtc, DateTime endTimeUtc)
+        {
+            return await _context.GroupLessonSlots
+                .AsNoTracking()
+                .Where(s =>
+                    s.TrainerId == trainerId &&
+                    s.IsActive &&
+                    s.StartTime < endTimeUtc &&
+                    s.EndTime > startTimeUtc)
+                .Select(s => new ValueTuple<DateTime, DateTime>(s.StartTime, s.EndTime))
+                .ToListAsync();
+        }
+
+        private static bool OverlapsAnyGroupBusyRange(DateTime startTimeUtc, DateTime endTimeUtc, List<(DateTime Start, DateTime End)> groupBusyRanges)
+        {
+            return groupBusyRanges.Any(range => startTimeUtc < range.End && range.Start < endTimeUtc);
         }
 
         private static bool CoversWholeRange(List<ScheduleSlot> slots, DateTime requestedStart, DateTime requestedEnd)

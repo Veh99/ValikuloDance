@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
 using ValikuloDance.Api.Settings;
@@ -65,18 +65,18 @@ namespace ValikuloDance.Application.Services
             var plan = await _context.SubscriptionPlans
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == request.SubscriptionPlanId && x.IsActive)
-                ?? throw new KeyNotFoundException("План абонемента не найден.");
+                ?? throw new KeyNotFoundException("РџР»Р°РЅ Р°Р±РѕРЅРµРјРµРЅС‚Р° РЅРµ РЅР°Р№РґРµРЅ.");
 
             var user = await _context.Users
                 .FirstOrDefaultAsync(x => x.Id == userId)
-                ?? throw new KeyNotFoundException("Пользователь не найден.");
+                ?? throw new KeyNotFoundException("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
 
             var hasTelegramBinding = await _context.TelegramChatBindings
                 .AnyAsync(x => x.UserId == userId && x.IsActive && !x.IsDeleted);
 
             if (!hasTelegramBinding)
             {
-                throw new InvalidOperationException("Перед оформлением абонемента запустите Telegram-бота и нажмите Start, чтобы получить реквизиты и уведомления.");
+                throw new InvalidOperationException("РџРµСЂРµРґ РѕС„РѕСЂРјР»РµРЅРёРµРј Р°Р±РѕРЅРµРјРµРЅС‚Р° Р·Р°РїСѓСЃС‚РёС‚Рµ Telegram-Р±РѕС‚Р° Рё РЅР°Р¶РјРёС‚Рµ Start, С‡С‚РѕР±С‹ РїРѕР»СѓС‡РёС‚СЊ СЂРµРєРІРёР·РёС‚С‹ Рё СѓРІРµРґРѕРјР»РµРЅРёСЏ.");
             }
 
             var hasOpenSubscription = await _context.Subscriptions.AnyAsync(x =>
@@ -87,7 +87,7 @@ namespace ValikuloDance.Application.Services
 
             if (hasOpenSubscription)
             {
-                throw new InvalidOperationException("У вас уже есть активный или ожидающий подтверждения абонемент этого формата.");
+                throw new InvalidOperationException("РЈ РІР°СЃ СѓР¶Рµ РµСЃС‚СЊ Р°РєС‚РёРІРЅС‹Р№ РёР»Рё РѕР¶РёРґР°СЋС‰РёР№ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ Р°Р±РѕРЅРµРјРµРЅС‚ СЌС‚РѕРіРѕ С„РѕСЂРјР°С‚Р°.");
             }
 
             var now = DateTime.UtcNow;
@@ -166,19 +166,19 @@ namespace ValikuloDance.Application.Services
             var subscription = await _context.Subscriptions
                 .Include(x => x.SubscriptionPlan)
                 .FirstOrDefaultAsync(x => x.Id == subscriptionId && x.UserId == userId && x.IsActive)
-                ?? throw new InvalidOperationException("Абонемент не найден.");
+                ?? throw new InvalidOperationException("РђР±РѕРЅРµРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
 
             if (subscription.Status != "Active")
-                throw new InvalidOperationException("Абонемент ещё не активирован и не может быть использован для записи.");
+                throw new InvalidOperationException("РђР±РѕРЅРµРјРµРЅС‚ РµС‰С‘ РЅРµ Р°РєС‚РёРІРёСЂРѕРІР°РЅ Рё РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РёСЃРїРѕР»СЊР·РѕРІР°РЅ РґР»СЏ Р·Р°РїРёСЃРё.");
 
             if (subscription.SubscriptionPlan.Format != normalizedFormat)
-                throw new InvalidOperationException("Этот абонемент нельзя использовать для выбранного формата занятия.");
+                throw new InvalidOperationException("Р­С‚РѕС‚ Р°Р±РѕРЅРµРјРµРЅС‚ РЅРµР»СЊР·СЏ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РґР»СЏ РІС‹Р±СЂР°РЅРЅРѕРіРѕ С„РѕСЂРјР°С‚Р° Р·Р°РЅСЏС‚РёСЏ.");
 
             if (subscription.ExpiresAt <= DateTime.UtcNow)
-                throw new InvalidOperationException("Срок действия абонемента истёк.");
+                throw new InvalidOperationException("РЎСЂРѕРє РґРµР№СЃС‚РІРёСЏ Р°Р±РѕРЅРµРјРµРЅС‚Р° РёСЃС‚С‘Рє.");
 
             if (subscription.UsedSessions >= subscription.TotalSessions)
-                throw new InvalidOperationException("В абонементе не осталось доступных занятий.");
+                throw new InvalidOperationException("Р’ Р°Р±РѕРЅРµРјРµРЅС‚Рµ РЅРµ РѕСЃС‚Р°Р»РѕСЃСЊ РґРѕСЃС‚СѓРїРЅС‹С… Р·Р°РЅСЏС‚РёР№.");
 
             return subscription;
         }
@@ -370,10 +370,10 @@ namespace ValikuloDance.Application.Services
             var service = await _context.Services
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == serviceId && x.IsActive)
-                ?? throw new KeyNotFoundException("Групповая услуга не найдена.");
+                ?? throw new KeyNotFoundException("Р“СЂСѓРїРїРѕРІР°СЏ СѓСЃР»СѓРіР° РЅРµ РЅР°Р№РґРµРЅР°.");
 
             if (service.IsPackage || NormalizeFormat(service.Format) != "Group")
-                throw new InvalidOperationException("Для групповой записи нужно выбрать разовое групповое занятие.");
+                throw new InvalidOperationException("Р”Р»СЏ РіСЂСѓРїРїРѕРІРѕР№ Р·Р°РїРёСЃРё РЅСѓР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ СЂР°Р·РѕРІРѕРµ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ.");
 
             await EnsureGroupLessonSlotsGeneratedAsync(service, Math.Min(Math.Max(days, 1), _settings.GroupLessonHorizonDays));
 
@@ -402,8 +402,9 @@ namespace ValikuloDance.Application.Services
                     Id = slot.Id,
                     ServiceId = slot.ServiceId,
                     TrainerId = slot.TrainerId,
+                    GroupLessonScheduleId = slot.GroupLessonScheduleId,
                     ServiceName = slot.Service.Name,
-                    TrainerName = slot.Trainer.User?.Name ?? "Тренер",
+                    TrainerName = slot.Trainer.User?.Name ?? "РўСЂРµРЅРµСЂ",
                     StartTime = slot.StartTime,
                     EndTime = slot.EndTime,
                     Capacity = slot.Capacity,
@@ -416,28 +417,35 @@ namespace ValikuloDance.Application.Services
         {
             var userId = ExtractUserId(userClaims);
             var user = await _context.Users.FindAsync(userId)
-                ?? throw new KeyNotFoundException("Пользователь не найден.");
+                ?? throw new KeyNotFoundException("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
 
             var slot = await _context.GroupLessonSlots
                 .Include(x => x.Service)
                 .Include(x => x.Trainer).ThenInclude(t => t.User)
                 .FirstOrDefaultAsync(x => x.Id == request.GroupLessonSlotId && x.IsActive)
-                ?? throw new KeyNotFoundException("Групповой слот не найден.");
+                ?? throw new KeyNotFoundException("Р“СЂСѓРїРїРѕРІРѕР№ СЃР»РѕС‚ РЅРµ РЅР°Р№РґРµРЅ.");
 
             await EnsureTrainerTelegramReadyAsync(slot.Trainer.UserId);
 
-            if (!AllowedGroupDays.Contains(slot.StartTime.DayOfWeek))
-                throw new InvalidOperationException("Для групповых занятий доступны только вторник, четверг и суббота.");
-
             if (slot.StartTime < DateTime.UtcNow.AddHours(3))
-                throw new InvalidOperationException("На групповое занятие можно записаться не позднее чем за 3 часа до начала.");
+                throw new InvalidOperationException("РќР° РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ РјРѕР¶РЅРѕ Р·Р°РїРёСЃР°С‚СЊСЃСЏ РЅРµ РїРѕР·РґРЅРµРµ С‡РµРј Р·Р° 3 С‡Р°СЃР° РґРѕ РЅР°С‡Р°Р»Р°.");
 
             var occupiedCount = await _context.Bookings.CountAsync(x =>
                 x.GroupLessonSlotId == slot.Id &&
                 x.Status != "Cancelled");
 
             if (occupiedCount >= slot.Capacity)
-                throw new InvalidOperationException("На это групповое занятие свободных мест больше нет.");
+                throw new InvalidOperationException("РќР° СЌС‚Рѕ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ СЃРІРѕР±РѕРґРЅС‹С… РјРµСЃС‚ Р±РѕР»СЊС€Рµ РЅРµС‚.");
+
+            var trainerHasIndividualBooking = await _context.Bookings.AnyAsync(x =>
+                x.TrainerId == slot.TrainerId &&
+                x.GroupLessonSlotId == null &&
+                x.Status != "Cancelled" &&
+                x.StartTime < slot.EndTime &&
+                x.EndTime > slot.StartTime);
+
+            if (trainerHasIndividualBooking)
+                throw new InvalidOperationException("РўСЂРµРЅРµСЂ СѓР¶Рµ Р·Р°РЅСЏС‚ РІ СЌС‚Рѕ РІСЂРµРјСЏ.");
 
             var hasExistingBooking = await _context.Bookings.AnyAsync(x =>
                 x.UserId == userId &&
@@ -445,7 +453,7 @@ namespace ValikuloDance.Application.Services
                 x.Status != "Cancelled");
 
             if (hasExistingBooking)
-                throw new InvalidOperationException("Вы уже записаны на это групповое занятие.");
+                throw new InvalidOperationException("Р’С‹ СѓР¶Рµ Р·Р°РїРёСЃР°РЅС‹ РЅР° СЌС‚Рѕ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ.");
 
             var paymentMode = NormalizePaymentMode(request.PaymentMode);
             Subscription? subscription = null;
@@ -453,7 +461,7 @@ namespace ValikuloDance.Application.Services
             if (paymentMode == "Subscription")
             {
                 if (request.SubscriptionId == null)
-                    throw new InvalidOperationException("Для записи по абонементу выберите активный абонемент.");
+                    throw new InvalidOperationException("Р”Р»СЏ Р·Р°РїРёСЃРё РїРѕ Р°Р±РѕРЅРµРјРµРЅС‚Сѓ РІС‹Р±РµСЂРёС‚Рµ Р°РєС‚РёРІРЅС‹Р№ Р°Р±РѕРЅРµРјРµРЅС‚.");
 
                 subscription = await ValidateSubscriptionForBookingAsync(userId, request.SubscriptionId.Value, "Group");
             }
@@ -504,12 +512,129 @@ namespace ValikuloDance.Application.Services
             var notificationResult = await _telegramService.SendBookingPendingAsync(bookingForNotification);
             if (!notificationResult.IsMessageTypeSent("BookingPendingTrainer"))
             {
-                throw new InvalidOperationException("Не удалось отправить уведомление тренеру в Telegram. Запись не создана.");
+                throw new InvalidOperationException("РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёРµ С‚СЂРµРЅРµСЂСѓ РІ Telegram. Р—Р°РїРёСЃСЊ РЅРµ СЃРѕР·РґР°РЅР°.");
             }
 
             await transaction.CommitAsync();
             return MapBookingResponse(bookingForNotification);
             });
+        }
+
+        public async Task<List<GroupLessonScheduleResponse>> GetMyGroupLessonSchedulesAsync(ClaimsPrincipal userClaims)
+        {
+            var trainer = await GetTrainerForCurrentUserAsync(userClaims);
+
+            var schedules = await _context.GroupLessonSchedules
+                .AsNoTracking()
+                .Include(x => x.Service)
+                .Include(x => x.Trainer).ThenInclude(t => t.User)
+                .Where(x => x.TrainerId == trainer.Id && x.IsActive && !x.IsDeleted)
+                .OrderBy(x => x.DayOfWeek)
+                .ThenBy(x => x.StartTimeLocal)
+                .ToListAsync();
+
+            return schedules.Select(MapGroupLessonSchedule).ToList();
+        }
+
+        public async Task<GroupLessonScheduleResponse> CreateMyGroupLessonScheduleAsync(UpsertGroupLessonScheduleRequest request, ClaimsPrincipal userClaims)
+        {
+            var trainer = await GetTrainerForCurrentUserAsync(userClaims);
+            var service = await GetGroupServiceAsync(request.ServiceId);
+            var startTime = ParseLocalTime(request.StartTimeLocal);
+            var capacity = NormalizeGroupCapacity(request.Capacity);
+
+            var duplicate = await _context.GroupLessonSchedules.AnyAsync(x =>
+                x.TrainerId == trainer.Id &&
+                x.ServiceId == service.Id &&
+                x.DayOfWeek == request.DayOfWeek &&
+                x.StartTimeLocal == startTime &&
+                !x.IsDeleted);
+
+            if (duplicate)
+                throw new InvalidOperationException("РўР°РєРѕРµ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ СѓР¶Рµ РµСЃС‚СЊ РІ СЂР°СЃРїРёСЃР°РЅРёРё.");
+
+            var schedule = new GroupLessonSchedule
+            {
+                Id = Guid.NewGuid(),
+                TrainerId = trainer.Id,
+                ServiceId = service.Id,
+                DayOfWeek = request.DayOfWeek,
+                StartTimeLocal = startTime,
+                Capacity = capacity,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _context.GroupLessonSchedules.AddAsync(schedule);
+            await _context.SaveChangesAsync();
+
+            await EnsureGroupLessonSlotsGeneratedAsync(service, _settings.GroupLessonHorizonDays);
+
+            schedule.Service = service;
+            schedule.Trainer = trainer;
+            return MapGroupLessonSchedule(schedule);
+        }
+
+        public async Task<GroupLessonScheduleResponse> UpdateMyGroupLessonScheduleAsync(Guid scheduleId, UpsertGroupLessonScheduleRequest request, ClaimsPrincipal userClaims)
+        {
+            var trainer = await GetTrainerForCurrentUserAsync(userClaims);
+            var schedule = await _context.GroupLessonSchedules
+                .Include(x => x.Service)
+                .Include(x => x.Trainer).ThenInclude(t => t.User)
+                .FirstOrDefaultAsync(x => x.Id == scheduleId && x.TrainerId == trainer.Id && !x.IsDeleted)
+                ?? throw new KeyNotFoundException("Р“СЂСѓРїРїРѕРІРѕРµ СЂР°СЃРїРёСЃР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ.");
+
+            var service = await GetGroupServiceAsync(request.ServiceId);
+            var oldService = schedule.Service;
+            var startTime = ParseLocalTime(request.StartTimeLocal);
+            var capacity = NormalizeGroupCapacity(request.Capacity);
+
+            var duplicate = await _context.GroupLessonSchedules.AnyAsync(x =>
+                x.Id != schedule.Id &&
+                x.TrainerId == trainer.Id &&
+                x.ServiceId == service.Id &&
+                x.DayOfWeek == request.DayOfWeek &&
+                x.StartTimeLocal == startTime &&
+                !x.IsDeleted);
+
+            if (duplicate)
+                throw new InvalidOperationException("РўР°РєРѕРµ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ СѓР¶Рµ РµСЃС‚СЊ РІ СЂР°СЃРїРёСЃР°РЅРёРё.");
+
+            await PurgeFutureFreeGroupSlotsForScheduleAsync(schedule.Id);
+
+            schedule.ServiceId = service.Id;
+            schedule.DayOfWeek = request.DayOfWeek;
+            schedule.StartTimeLocal = startTime;
+            schedule.Capacity = capacity;
+            schedule.IsActive = true;
+            schedule.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            if (oldService.Id != service.Id)
+                await EnsureGroupLessonSlotsGeneratedAsync(oldService, _settings.GroupLessonHorizonDays);
+
+            await EnsureGroupLessonSlotsGeneratedAsync(service, _settings.GroupLessonHorizonDays);
+
+            schedule.Service = service;
+            schedule.Trainer = trainer;
+            return MapGroupLessonSchedule(schedule);
+        }
+
+        public async Task DeleteMyGroupLessonScheduleAsync(Guid scheduleId, ClaimsPrincipal userClaims)
+        {
+            var trainer = await GetTrainerForCurrentUserAsync(userClaims);
+            var schedule = await _context.GroupLessonSchedules
+                .FirstOrDefaultAsync(x => x.Id == scheduleId && x.TrainerId == trainer.Id && !x.IsDeleted)
+                ?? throw new KeyNotFoundException("Р“СЂСѓРїРїРѕРІРѕРµ СЂР°СЃРїРёСЃР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ.");
+
+            await PurgeFutureFreeGroupSlotsForScheduleAsync(schedule.Id);
+
+            schedule.IsActive = false;
+            schedule.IsDeleted = true;
+            schedule.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
         }
 
         public async Task EnsureSubscriptionPlansSyncedAsync()
@@ -577,48 +702,64 @@ namespace ValikuloDance.Application.Services
 
         private async Task EnsureGroupLessonSlotsGeneratedAsync(Service groupService, int days)
         {
-            var trainerId = await ResolveGroupTrainerIdAsync();
-            var startTimes = ParseGroupStartTimes();
             var timeZone = GetMoscowTimeZone();
             var todayLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone).Date;
             var lastLocalDate = todayLocal.AddDays(days);
+            var schedules = await GetGroupLessonGenerationItemsAsync(groupService);
 
-            var existingStarts = await _context.GroupLessonSlots
+            var existingSlots = await _context.GroupLessonSlots
                 .Where(x => x.ServiceId == groupService.Id && x.StartTime >= DateTime.UtcNow.Date)
-                .Select(x => x.StartTime)
+                .Select(x => new { x.TrainerId, x.StartTime })
                 .ToListAsync();
 
-            var existingSet = existingStarts.ToHashSet();
+            var existingSet = existingSlots
+                .Select(x => (x.TrainerId, x.StartTime))
+                .ToHashSet();
+            var individualBookings = await _context.Bookings
+                .AsNoTracking()
+                .Where(x =>
+                    x.GroupLessonSlotId == null &&
+                    x.Status != "Cancelled" &&
+                    x.StartTime < TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(lastLocalDate.AddDays(1), DateTimeKind.Unspecified), timeZone) &&
+                    x.EndTime > TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(todayLocal, DateTimeKind.Unspecified), timeZone))
+                .Select(x => new { x.TrainerId, x.StartTime, x.EndTime })
+                .ToListAsync();
             var hasChanges = false;
 
             for (var date = todayLocal; date <= lastLocalDate; date = date.AddDays(1))
             {
-                if (!AllowedGroupDays.Contains(date.DayOfWeek))
-                    continue;
-
-                foreach (var startTime in startTimes)
+                foreach (var schedule in schedules.Where(x => x.DayOfWeek == date.DayOfWeek))
                 {
-                    var localStart = date.Add(startTime);
+                    var localStart = date.Add(schedule.StartTimeLocal);
                     var localEnd = localStart.AddMinutes(groupService.DurationMinutes);
                     var utcStart = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localStart, DateTimeKind.Unspecified), timeZone);
                     var utcEnd = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localEnd, DateTimeKind.Unspecified), timeZone);
 
-                    if (existingSet.Contains(utcStart))
+                    if (existingSet.Contains((schedule.TrainerId, utcStart)))
                         continue;
+
+                    if (individualBookings.Any(x =>
+                            x.TrainerId == schedule.TrainerId &&
+                            x.StartTime < utcEnd &&
+                            x.EndTime > utcStart))
+                    {
+                        continue;
+                    }
 
                     _context.GroupLessonSlots.Add(new GroupLessonSlot
                     {
                         Id = Guid.NewGuid(),
                         ServiceId = groupService.Id,
-                        TrainerId = trainerId,
+                        TrainerId = schedule.TrainerId,
+                        GroupLessonScheduleId = schedule.ScheduleId,
                         StartTime = utcStart,
                         EndTime = utcEnd,
-                        Capacity = _settings.GroupLessonCapacity,
+                        Capacity = schedule.Capacity,
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow
                     });
 
-                    existingSet.Add(utcStart);
+                    existingSet.Add((schedule.TrainerId, utcStart));
                     hasChanges = true;
                 }
             }
@@ -627,6 +768,33 @@ namespace ValikuloDance.Application.Services
             {
                 await _context.SaveChangesAsync();
             }
+        }
+
+        private async Task<List<GroupLessonGenerationItem>> GetGroupLessonGenerationItemsAsync(Service groupService)
+        {
+            var schedules = await _context.GroupLessonSchedules
+                .AsNoTracking()
+                .Where(x => x.ServiceId == groupService.Id && x.IsActive && !x.IsDeleted && x.Trainer.IsActive)
+                .Select(x => new GroupLessonGenerationItem(
+                    x.Id,
+                    x.TrainerId,
+                    x.DayOfWeek,
+                    x.StartTimeLocal,
+                    x.Capacity))
+                .ToListAsync();
+
+            if (schedules.Count > 0)
+                return schedules;
+
+            var fallbackTrainerId = await ResolveGroupTrainerIdAsync();
+            return AllowedGroupDays
+                .SelectMany(day => ParseGroupStartTimes().Select(startTime => new GroupLessonGenerationItem(
+                    null,
+                    fallbackTrainerId,
+                    day,
+                    startTime,
+                    _settings.GroupLessonCapacity)))
+                .ToList();
         }
 
         private async Task<Guid> ResolveGroupTrainerIdAsync()
@@ -643,7 +811,7 @@ namespace ValikuloDance.Application.Services
             var trainer = await _context.Trainers
                 .OrderBy(x => x.CreatedAt)
                 .FirstOrDefaultAsync(x => x.IsActive)
-                ?? throw new InvalidOperationException("Для групповых занятий нужен хотя бы один активный тренер.");
+                ?? throw new InvalidOperationException("Р”Р»СЏ РіСЂСѓРїРїРѕРІС‹С… Р·Р°РЅСЏС‚РёР№ РЅСѓР¶РµРЅ С…РѕС‚СЏ Р±С‹ РѕРґРёРЅ Р°РєС‚РёРІРЅС‹Р№ С‚СЂРµРЅРµСЂ.");
 
             return trainer.Id;
         }
@@ -670,6 +838,87 @@ namespace ValikuloDance.Application.Services
 
             return times.Distinct().OrderBy(x => x).ToList();
         }
+
+        private async Task PurgeFutureFreeGroupSlotsForScheduleAsync(Guid scheduleId)
+        {
+            var now = DateTime.UtcNow;
+            var bookedSlotIds = await _context.Bookings
+                .Where(x => x.GroupLessonSlotId != null && x.Status != "Cancelled")
+                .Select(x => x.GroupLessonSlotId!.Value)
+                .Distinct()
+                .ToListAsync();
+
+            var slots = await _context.GroupLessonSlots
+                .Where(x =>
+                    x.GroupLessonScheduleId == scheduleId &&
+                    x.StartTime >= now &&
+                    !bookedSlotIds.Contains(x.Id))
+                .ToListAsync();
+
+            _context.GroupLessonSlots.RemoveRange(slots);
+        }
+
+        private async Task<Service> GetGroupServiceAsync(Guid serviceId)
+        {
+            var service = await _context.Services
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == serviceId && x.IsActive)
+                ?? throw new KeyNotFoundException("Групповая услуга не найдена.");
+
+            if (service.IsPackage || NormalizeFormat(service.Format) != "Group")
+                throw new InvalidOperationException("Для группового расписания выберите разовую групповую услугу.");
+
+            return service;
+        }
+
+        private async Task<Trainer> GetTrainerForCurrentUserAsync(ClaimsPrincipal userClaims)
+        {
+            var userId = ExtractUserId(userClaims);
+            return await _context.Trainers
+                .Include(x => x.User)
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.IsActive)
+                ?? throw new UnauthorizedAccessException("Только тренер может управлять своим групповым расписанием.");
+        }
+
+        private static TimeSpan ParseLocalTime(string value)
+        {
+            if (TimeSpan.TryParse(value, out var parsed))
+                return parsed;
+
+            throw new InvalidOperationException("Некорректное время группового занятия.");
+        }
+
+        private int NormalizeGroupCapacity(int? capacity)
+        {
+            var normalized = capacity ?? _settings.GroupLessonCapacity;
+            if (normalized < 1 || normalized > 100)
+                throw new InvalidOperationException("Вместимость группового занятия должна быть от 1 до 100.");
+
+            return normalized;
+        }
+
+        private static GroupLessonScheduleResponse MapGroupLessonSchedule(GroupLessonSchedule schedule)
+        {
+            return new GroupLessonScheduleResponse
+            {
+                Id = schedule.Id,
+                TrainerId = schedule.TrainerId,
+                ServiceId = schedule.ServiceId,
+                ServiceName = schedule.Service.Name,
+                TrainerName = schedule.Trainer.User?.Name ?? "Тренер",
+                DayOfWeek = schedule.DayOfWeek,
+                StartTimeLocal = schedule.StartTimeLocal.ToString(@"hh\:mm"),
+                Capacity = schedule.Capacity,
+                IsActive = schedule.IsActive
+            };
+        }
+
+        private sealed record GroupLessonGenerationItem(
+            Guid? ScheduleId,
+            Guid TrainerId,
+            DayOfWeek DayOfWeek,
+            TimeSpan StartTimeLocal,
+            int Capacity);
 
         private static SubscriptionResponse MapSubscription(Subscription subscription)
         {
@@ -710,7 +959,7 @@ namespace ValikuloDance.Application.Services
                 SubscriptionId = booking.SubscriptionId,
                 GroupLessonSlotId = booking.GroupLessonSlotId,
                 UserName = booking.User.Name,
-                TrainerName = booking.Trainer.User?.Name ?? "РўСЂРµРЅРµСЂ",
+                TrainerName = booking.Trainer.User?.Name ?? "Р СћРЎР‚Р ВµР Р…Р ВµРЎР‚",
                 ServiceName = booking.Service.Name,
                 StartTime = booking.StartTime,
                 EndTime = booking.EndTime,
@@ -728,7 +977,7 @@ namespace ValikuloDance.Application.Services
         {
             if (!await _telegramService.HasActiveChatBindingAsync(trainerUserId))
             {
-                throw new InvalidOperationException("Тренер ещё не подключил Telegram-бота. Запись временно недоступна.");
+                throw new InvalidOperationException("РўСЂРµРЅРµСЂ РµС‰С‘ РЅРµ РїРѕРґРєР»СЋС‡РёР» Telegram-Р±РѕС‚Р°. Р—Р°РїРёСЃСЊ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРЅР°.");
             }
         }
 
@@ -764,10 +1013,10 @@ namespace ValikuloDance.Application.Services
                ?? userClaims.FindFirst(ClaimTypes.PrimarySid)?.Value;
 
             if (string.IsNullOrEmpty(userIdClaim))
-                throw new UnauthorizedAccessException("Пользователь не авторизован.");
+                throw new UnauthorizedAccessException("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ.");
 
             if (!Guid.TryParse(userIdClaim, out var userId))
-                throw new UnauthorizedAccessException("Некорректный идентификатор пользователя.");
+                throw new UnauthorizedAccessException("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
 
             return userId;
         }
