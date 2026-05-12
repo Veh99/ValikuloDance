@@ -76,8 +76,8 @@ public class BookingController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "РћС€РёР±РєР° РїСЂРё СЃРѕР·РґР°РЅРёРё РіСЂСѓРїРїРѕРІРѕР№ Р·Р°РїРёСЃРё");
-            return StatusCode(500, new { message = "Р’РЅСѓС‚СЂРµРЅРЅСЏСЏ РѕС€РёР±РєР° СЃРµСЂРІРµСЂР°" });
+            _logger.LogError(ex, "Ошибка при создании групповой записи");
+            return StatusCode(500, new { message = "Внутренняя ошибка сервера" });
         }
     }
 

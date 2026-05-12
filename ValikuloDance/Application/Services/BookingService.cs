@@ -67,7 +67,7 @@ namespace ValikuloDance.Application.Services
                 if (request.SubscriptionId == null)
                     throw new InvalidOperationException("Выберите активный абонемент для записи.");
 
-                subscription = await _subscriptionService.ValidateSubscriptionForBookingAsync(userId, request.SubscriptionId.Value, "Individual");
+                subscription = await _subscriptionService.ValidateSubscriptionForBookingAsync(userId, request.SubscriptionId.Value, service);
             }
 
             var startTimeUtc = NormalizeToUtc(request.StartTime);

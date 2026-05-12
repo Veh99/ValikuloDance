@@ -78,6 +78,9 @@ namespace ValikuloDance.Api.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenDto refreshTokenDto)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             try
             {
                 var result = await _authService.RefreshTokenAsync(refreshTokenDto);

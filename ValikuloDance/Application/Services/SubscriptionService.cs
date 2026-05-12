@@ -32,6 +32,7 @@ namespace ValikuloDance.Application.Services
 
             var query = _context.SubscriptionPlans
                 .AsNoTracking()
+                .Include(x => x.SourceService)
                 .Where(x => x.IsActive);
 
             if (!string.IsNullOrWhiteSpace(format))
@@ -48,6 +49,7 @@ namespace ValikuloDance.Application.Services
                     Name = x.Name,
                     Description = x.Description,
                     Format = x.Format,
+                    SourceServiceId = x.SourceServiceId,
                     SessionsCount = x.SessionsCount,
                     ValidityMonths = x.ValidityMonths,
                     Price = x.Price
@@ -62,30 +64,39 @@ namespace ValikuloDance.Application.Services
             var userId = ExtractUserId(userClaims);
             var plan = await _context.SubscriptionPlans
                 .AsNoTracking()
+                .Include(x => x.SourceService)
                 .FirstOrDefaultAsync(x => x.Id == request.SubscriptionPlanId && x.IsActive)
-                ?? throw new KeyNotFoundException("РџР»Р°РЅ Р°Р±РѕРЅРµРјРµРЅС‚Р° РЅРµ РЅР°Р№РґРµРЅ.");
+                ?? throw new KeyNotFoundException("План абонемента не найден.");
 
             var user = await _context.Users
                 .FirstOrDefaultAsync(x => x.Id == userId)
-                ?? throw new KeyNotFoundException("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
+                ?? throw new KeyNotFoundException("Пользователь не найден.");
 
             var hasTelegramBinding = await _context.TelegramChatBindings
                 .AnyAsync(x => x.UserId == userId && x.IsActive && !x.IsDeleted);
 
             if (!hasTelegramBinding)
             {
-                throw new InvalidOperationException("РџРµСЂРµРґ РѕС„РѕСЂРјР»РµРЅРёРµРј Р°Р±РѕРЅРµРјРµРЅС‚Р° Р·Р°РїСѓСЃС‚РёС‚Рµ Telegram-Р±РѕС‚Р° Рё РЅР°Р¶РјРёС‚Рµ Start, С‡С‚РѕР±С‹ РїРѕР»СѓС‡РёС‚СЊ СЂРµРєРІРёР·РёС‚С‹ Рё СѓРІРµРґРѕРјР»РµРЅРёСЏ.");
+                throw new InvalidOperationException("Перед оформлением абонемента запустите Telegram-бота и нажмите Start, чтобы получить реквизиты и уведомления.");
             }
 
-            var hasOpenSubscription = await _context.Subscriptions.AnyAsync(x =>
-                x.UserId == userId &&
-                x.IsActive &&
-                (x.Status == "PendingPayment" || x.Status == "Active") &&
-                x.SubscriptionPlan.Format == plan.Format);
+            var requestedScope = GetSubscriptionScopeKey(plan);
+            var openSubscriptions = await _context.Subscriptions
+                .AsNoTracking()
+                .Include(x => x.SubscriptionPlan).ThenInclude(p => p.SourceService)
+                .Where(x =>
+                    x.UserId == userId &&
+                    x.IsActive &&
+                    (x.Status == "PendingPayment" || x.Status == "Active") &&
+                    x.SubscriptionPlan.Format == plan.Format)
+                .ToListAsync();
+
+            var hasOpenSubscription = openSubscriptions.Any(x =>
+                GetSubscriptionScopeKey(x.SubscriptionPlan) == requestedScope);
 
             if (hasOpenSubscription)
             {
-                throw new InvalidOperationException("РЈ РІР°СЃ СѓР¶Рµ РµСЃС‚СЊ Р°РєС‚РёРІРЅС‹Р№ РёР»Рё РѕР¶РёРґР°СЋС‰РёР№ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ Р°Р±РѕРЅРµРјРµРЅС‚ СЌС‚РѕРіРѕ С„РѕСЂРјР°С‚Р°.");
+                throw new InvalidOperationException("У вас уже есть активный или ожидающий подтверждения абонемент этого типа.");
             }
 
             var now = DateTime.UtcNow;
@@ -129,14 +140,26 @@ namespace ValikuloDance.Application.Services
             return subscriptions.Select(MapSubscription).ToList();
         }
 
-        public async Task<List<ActiveSubscriptionOptionResponse>> GetActiveSubscriptionsAsync(ClaimsPrincipal userClaims, string format)
+        public async Task<List<ActiveSubscriptionOptionResponse>> GetActiveSubscriptionsAsync(ClaimsPrincipal userClaims, string format, Guid? serviceId = null)
         {
             var userId = ExtractUserId(userClaims);
             var normalizedFormat = NormalizeFormat(format);
+            Service? targetService = null;
+
+            if (serviceId != null)
+            {
+                targetService = await _context.Services
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Id == serviceId.Value && x.IsActive)
+                    ?? throw new KeyNotFoundException("Услуга не найдена.");
+
+                if (NormalizeFormat(targetService.Format) != normalizedFormat)
+                    throw new InvalidOperationException("Абонемент не соответствует формату выбранной услуги.");
+            }
 
             var subscriptions = await _context.Subscriptions
                 .AsNoTracking()
-                .Include(x => x.SubscriptionPlan)
+                .Include(x => x.SubscriptionPlan).ThenInclude(p => p.SourceService)
                 .Where(x =>
                     x.UserId == userId &&
                     x.Status == "Active" &&
@@ -147,36 +170,48 @@ namespace ValikuloDance.Application.Services
                 .OrderBy(x => x.ExpiresAt)
                 .ToListAsync();
 
+            if (targetService != null)
+            {
+                var targetScope = GetServiceSubscriptionScopeKey(targetService);
+                subscriptions = subscriptions
+                    .Where(x => GetSubscriptionScopeKey(x.SubscriptionPlan) == targetScope)
+                    .ToList();
+            }
+
             return subscriptions.Select(x => new ActiveSubscriptionOptionResponse
             {
                 Id = x.Id,
                 PlanName = x.SubscriptionPlan.Name,
                 Format = x.SubscriptionPlan.Format,
+                SourceServiceId = x.SubscriptionPlan.SourceServiceId,
                 RemainingSessions = x.TotalSessions - x.UsedSessions,
                 ExpiresAt = x.ExpiresAt
             }).ToList();
         }
 
-        public async Task<Subscription> ValidateSubscriptionForBookingAsync(Guid userId, Guid subscriptionId, string expectedFormat)
+        public async Task<Subscription> ValidateSubscriptionForBookingAsync(Guid userId, Guid subscriptionId, Service bookingService)
         {
-            var normalizedFormat = NormalizeFormat(expectedFormat);
+            var normalizedFormat = NormalizeFormat(bookingService.Format);
 
             var subscription = await _context.Subscriptions
-                .Include(x => x.SubscriptionPlan)
+                .Include(x => x.SubscriptionPlan).ThenInclude(p => p.SourceService)
                 .FirstOrDefaultAsync(x => x.Id == subscriptionId && x.UserId == userId && x.IsActive)
-                ?? throw new InvalidOperationException("РђР±РѕРЅРµРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+                ?? throw new InvalidOperationException("Абонемент не найден.");
 
             if (subscription.Status != "Active")
-                throw new InvalidOperationException("РђР±РѕРЅРµРјРµРЅС‚ РµС‰С‘ РЅРµ Р°РєС‚РёРІРёСЂРѕРІР°РЅ Рё РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РёСЃРїРѕР»СЊР·РѕРІР°РЅ РґР»СЏ Р·Р°РїРёСЃРё.");
+                throw new InvalidOperationException("Абонемент еще не активирован и не может быть использован для записи.");
 
             if (subscription.SubscriptionPlan.Format != normalizedFormat)
-                throw new InvalidOperationException("Р­С‚РѕС‚ Р°Р±РѕРЅРµРјРµРЅС‚ РЅРµР»СЊР·СЏ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РґР»СЏ РІС‹Р±СЂР°РЅРЅРѕРіРѕ С„РѕСЂРјР°С‚Р° Р·Р°РЅСЏС‚РёСЏ.");
+                throw new InvalidOperationException("Этот абонемент нельзя использовать для выбранного формата занятия.");
+
+            if (GetSubscriptionScopeKey(subscription.SubscriptionPlan) != GetServiceSubscriptionScopeKey(bookingService))
+                throw new InvalidOperationException("Этот абонемент не подходит для выбранного занятия.");
 
             if (subscription.ExpiresAt <= DateTime.UtcNow)
-                throw new InvalidOperationException("РЎСЂРѕРє РґРµР№СЃС‚РІРёСЏ Р°Р±РѕРЅРµРјРµРЅС‚Р° РёСЃС‚С‘Рє.");
+                throw new InvalidOperationException("Срок действия абонемента истек.");
 
             if (subscription.UsedSessions >= subscription.TotalSessions)
-                throw new InvalidOperationException("Р’ Р°Р±РѕРЅРµРјРµРЅС‚Рµ РЅРµ РѕСЃС‚Р°Р»РѕСЃСЊ РґРѕСЃС‚СѓРїРЅС‹С… Р·Р°РЅСЏС‚РёР№.");
+                throw new InvalidOperationException("В абонементе не осталось доступных занятий.");
 
             return subscription;
         }
@@ -368,10 +403,10 @@ namespace ValikuloDance.Application.Services
             var service = await _context.Services
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == serviceId && x.IsActive)
-                ?? throw new KeyNotFoundException("Р“СЂСѓРїРїРѕРІР°СЏ СѓСЃР»СѓРіР° РЅРµ РЅР°Р№РґРµРЅР°.");
+                ?? throw new KeyNotFoundException("Групповая услуга не найдена.");
 
             if (service.IsPackage || NormalizeFormat(service.Format) != "Group")
-                throw new InvalidOperationException("Р”Р»СЏ РіСЂСѓРїРїРѕРІРѕР№ Р·Р°РїРёСЃРё РЅСѓР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ СЂР°Р·РѕРІРѕРµ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ.");
+                throw new InvalidOperationException("Для групповой записи нужно выбрать разовое групповое занятие.");
 
             await EnsureGroupLessonSlotsGeneratedAsync(service, Math.Min(Math.Max(days, 1), _settings.GroupLessonHorizonDays));
 
@@ -416,7 +451,7 @@ namespace ValikuloDance.Application.Services
                     TrainerId = slot.TrainerId,
                     GroupLessonScheduleId = slot.GroupLessonScheduleId,
                     ServiceName = slot.Service.Name,
-                    TrainerName = slot.Trainer.User?.Name ?? "РўСЂРµРЅРµСЂ",
+                    TrainerName = slot.Trainer.User?.Name ?? "Тренер",
                     StartTime = slot.StartTime,
                     EndTime = slot.EndTime,
                     Capacity = slot.Capacity,
@@ -429,16 +464,16 @@ namespace ValikuloDance.Application.Services
         {
             var userId = ExtractUserId(userClaims);
             var user = await _context.Users.FindAsync(userId)
-                ?? throw new KeyNotFoundException("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
+                ?? throw new KeyNotFoundException("Пользователь не найден.");
 
             var slot = await _context.GroupLessonSlots
                 .Include(x => x.Service)
                 .Include(x => x.Trainer).ThenInclude(t => t.User)
                 .FirstOrDefaultAsync(x => x.Id == request.GroupLessonSlotId && x.IsActive)
-                ?? throw new KeyNotFoundException("Р“СЂСѓРїРїРѕРІРѕР№ СЃР»РѕС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+                ?? throw new KeyNotFoundException("Групповой слот не найден.");
 
             if (slot.GroupLessonScheduleId == null)
-                throw new InvalidOperationException("Р“СЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ Р±РѕР»СЊС€Рµ РЅРµРґРѕСЃС‚СѓРїРЅРѕ РґР»СЏ Р·Р°РїРёСЃРё. РџРѕРїСЂРѕР±СѓР№С‚Рµ РІС‹Р±СЂР°С‚СЊ РґСЂСѓРіРѕР№ СЃР»РѕС‚.");
+                throw new InvalidOperationException("Групповое занятие больше недоступно для записи. Попробуйте выбрать другой слот.");
 
             var scheduleIsActive = await _context.GroupLessonSchedules.AnyAsync(x =>
                 x.Id == slot.GroupLessonScheduleId.Value &&
@@ -446,19 +481,19 @@ namespace ValikuloDance.Application.Services
                 !x.IsDeleted);
 
             if (!scheduleIsActive)
-                throw new InvalidOperationException("Р“СЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ Р±РѕР»СЊС€Рµ РЅРµРґРѕСЃС‚СѓРїРЅРѕ РґР»СЏ Р·Р°РїРёСЃРё. РџРѕРїСЂРѕР±СѓР№С‚Рµ РІС‹Р±СЂР°С‚СЊ РґСЂСѓРіРѕР№ СЃР»РѕС‚.");
+                throw new InvalidOperationException("Групповое занятие больше недоступно для записи. Попробуйте выбрать другой слот.");
 
             await EnsureTrainerTelegramReadyAsync(slot.Trainer.UserId);
 
             if (slot.StartTime < DateTime.UtcNow.AddHours(3))
-                throw new InvalidOperationException("РќР° РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ РјРѕР¶РЅРѕ Р·Р°РїРёСЃР°С‚СЊСЃСЏ РЅРµ РїРѕР·РґРЅРµРµ С‡РµРј Р·Р° 3 С‡Р°СЃР° РґРѕ РЅР°С‡Р°Р»Р°.");
+                throw new InvalidOperationException("На групповое занятие можно записаться не позднее чем за 3 часа до начала.");
 
             var occupiedCount = await _context.Bookings.CountAsync(x =>
                 x.GroupLessonSlotId == slot.Id &&
                 x.Status != "Cancelled");
 
             if (occupiedCount >= slot.Capacity)
-                throw new InvalidOperationException("РќР° СЌС‚Рѕ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ СЃРІРѕР±РѕРґРЅС‹С… РјРµСЃС‚ Р±РѕР»СЊС€Рµ РЅРµС‚.");
+                throw new InvalidOperationException("На это групповое занятие свободных мест больше нет.");
 
             var trainerHasIndividualBooking = await _context.Bookings.AnyAsync(x =>
                 x.TrainerId == slot.TrainerId &&
@@ -468,7 +503,7 @@ namespace ValikuloDance.Application.Services
                 x.EndTime > slot.StartTime);
 
             if (trainerHasIndividualBooking)
-                throw new InvalidOperationException("РўСЂРµРЅРµСЂ СѓР¶Рµ Р·Р°РЅСЏС‚ РІ СЌС‚Рѕ РІСЂРµРјСЏ.");
+                throw new InvalidOperationException("Тренер уже занят в это время.");
 
             var hasExistingBooking = await _context.Bookings.AnyAsync(x =>
                 x.UserId == userId &&
@@ -476,7 +511,7 @@ namespace ValikuloDance.Application.Services
                 x.Status != "Cancelled");
 
             if (hasExistingBooking)
-                throw new InvalidOperationException("Р’С‹ СѓР¶Рµ Р·Р°РїРёСЃР°РЅС‹ РЅР° СЌС‚Рѕ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ.");
+                throw new InvalidOperationException("Вы уже записаны на это групповое занятие.");
 
             var paymentMode = NormalizePaymentMode(request.PaymentMode);
             Subscription? subscription = null;
@@ -484,9 +519,9 @@ namespace ValikuloDance.Application.Services
             if (paymentMode == "Subscription")
             {
                 if (request.SubscriptionId == null)
-                    throw new InvalidOperationException("Р”Р»СЏ Р·Р°РїРёСЃРё РїРѕ Р°Р±РѕРЅРµРјРµРЅС‚Сѓ РІС‹Р±РµСЂРёС‚Рµ Р°РєС‚РёРІРЅС‹Р№ Р°Р±РѕРЅРµРјРµРЅС‚.");
+                    throw new InvalidOperationException("Для записи по абонементу выберите активный абонемент.");
 
-                subscription = await ValidateSubscriptionForBookingAsync(userId, request.SubscriptionId.Value, "Group");
+                subscription = await ValidateSubscriptionForBookingAsync(userId, request.SubscriptionId.Value, slot.Service);
             }
 
             var price = paymentMode == "Subscription"
@@ -535,7 +570,7 @@ namespace ValikuloDance.Application.Services
             var notificationResult = await _telegramService.SendBookingPendingAsync(bookingForNotification);
             if (!notificationResult.IsMessageTypeSent("BookingPendingTrainer"))
             {
-                throw new InvalidOperationException("РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёРµ С‚СЂРµРЅРµСЂСѓ РІ Telegram. Р—Р°РїРёСЃСЊ РЅРµ СЃРѕР·РґР°РЅР°.");
+                throw new InvalidOperationException("Не удалось отправить уведомление тренеру в Telegram. Запись не создана.");
             }
 
             await transaction.CommitAsync();
@@ -574,7 +609,7 @@ namespace ValikuloDance.Application.Services
                 !x.IsDeleted);
 
             if (duplicate)
-                throw new InvalidOperationException("РўР°РєРѕРµ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ СѓР¶Рµ РµСЃС‚СЊ РІ СЂР°СЃРїРёСЃР°РЅРёРё.");
+                throw new InvalidOperationException("Такое групповое занятие уже есть в расписании.");
 
             var schedule = new GroupLessonSchedule
             {
@@ -605,7 +640,7 @@ namespace ValikuloDance.Application.Services
                 .Include(x => x.Service)
                 .Include(x => x.Trainer).ThenInclude(t => t.User)
                 .FirstOrDefaultAsync(x => x.Id == scheduleId && x.TrainerId == trainer.Id && !x.IsDeleted)
-                ?? throw new KeyNotFoundException("Р“СЂСѓРїРїРѕРІРѕРµ СЂР°СЃРїРёСЃР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ.");
+                ?? throw new KeyNotFoundException("Групповое расписание не найдено.");
 
             var service = await GetGroupServiceAsync(request.ServiceId);
             var oldService = schedule.Service;
@@ -621,7 +656,7 @@ namespace ValikuloDance.Application.Services
                 !x.IsDeleted);
 
             if (duplicate)
-                throw new InvalidOperationException("РўР°РєРѕРµ РіСЂСѓРїРїРѕРІРѕРµ Р·Р°РЅСЏС‚РёРµ СѓР¶Рµ РµСЃС‚СЊ РІ СЂР°СЃРїРёСЃР°РЅРёРё.");
+                throw new InvalidOperationException("Такое групповое занятие уже есть в расписании.");
 
             await PurgeFutureFreeGroupSlotsForScheduleAsync(schedule.Id);
 
@@ -649,7 +684,7 @@ namespace ValikuloDance.Application.Services
             var trainer = await GetTrainerForCurrentUserAsync(userClaims);
             var schedule = await _context.GroupLessonSchedules
                 .FirstOrDefaultAsync(x => x.Id == scheduleId && x.TrainerId == trainer.Id && !x.IsDeleted)
-                ?? throw new KeyNotFoundException("Р“СЂСѓРїРїРѕРІРѕРµ СЂР°СЃРїРёСЃР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ.");
+                ?? throw new KeyNotFoundException("Групповое расписание не найдено.");
 
             await PurgeFutureFreeGroupSlotsForScheduleAsync(schedule.Id);
 
@@ -930,7 +965,7 @@ namespace ValikuloDance.Application.Services
                 SubscriptionId = booking.SubscriptionId,
                 GroupLessonSlotId = booking.GroupLessonSlotId,
                 UserName = booking.User.Name,
-                TrainerName = booking.Trainer.User?.Name ?? "Р СћРЎР‚Р ВµР Р…Р ВµРЎР‚",
+                TrainerName = booking.Trainer.User?.Name ?? "Тренер",
                 ServiceName = booking.Service.Name,
                 StartTime = booking.StartTime,
                 EndTime = booking.EndTime,
@@ -948,7 +983,7 @@ namespace ValikuloDance.Application.Services
         {
             if (!await _telegramService.HasActiveChatBindingAsync(trainerUserId))
             {
-                throw new InvalidOperationException("РўСЂРµРЅРµСЂ РµС‰С‘ РЅРµ РїРѕРґРєР»СЋС‡РёР» Telegram-Р±РѕС‚Р°. Р—Р°РїРёСЃСЊ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРЅР°.");
+                throw new InvalidOperationException("Тренер еще не подключил Telegram-бота. Запись временно недоступна.");
             }
         }
 
@@ -959,6 +994,35 @@ namespace ValikuloDance.Application.Services
                 return false;
 
             return booking.PriceAtBooking <= booking.Service.Price;
+        }
+
+        private static string GetSubscriptionScopeKey(SubscriptionPlan plan)
+        {
+            if (plan.SourceService != null)
+                return GetServiceSubscriptionScopeKey(plan.SourceService);
+
+            return GetSubscriptionScopeKey(plan.Format, plan.Name, plan.Description);
+        }
+
+        private static string GetServiceSubscriptionScopeKey(Service service)
+        {
+            return GetSubscriptionScopeKey(service.Format, service.Name, service.Description);
+        }
+
+        private static string GetSubscriptionScopeKey(string? format, string? name, string? description)
+        {
+            var normalizedFormat = NormalizeFormat(format);
+            if (normalizedFormat != "Group")
+                return "Individual";
+
+            var text = $"{name} {description}".ToLowerInvariant();
+            var audience = text.Contains("дет") ||
+                text.Contains("child") ||
+                text.Contains("kid")
+                    ? "Children"
+                    : "Adult";
+
+            return $"Group:{audience}";
         }
 
         private static string NormalizeFormat(string? format)
@@ -984,10 +1048,10 @@ namespace ValikuloDance.Application.Services
                ?? userClaims.FindFirst(ClaimTypes.PrimarySid)?.Value;
 
             if (string.IsNullOrEmpty(userIdClaim))
-                throw new UnauthorizedAccessException("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ.");
+                throw new UnauthorizedAccessException("Пользователь не авторизован.");
 
             if (!Guid.TryParse(userIdClaim, out var userId))
-                throw new UnauthorizedAccessException("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.");
+                throw new UnauthorizedAccessException("Некорректный идентификатор пользователя.");
 
             return userId;
         }

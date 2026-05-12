@@ -52,10 +52,21 @@ namespace ValikuloDance.Api.Controllers
 
         [Authorize]
         [HttpGet("active")]
-        public async Task<IActionResult> GetActive([FromQuery] string format)
+        public async Task<IActionResult> GetActive([FromQuery] string format, [FromQuery] Guid? serviceId = null)
         {
-            var subscriptions = await _subscriptionService.GetActiveSubscriptionsAsync(User, format);
-            return Ok(subscriptions);
+            try
+            {
+                var subscriptions = await _subscriptionService.GetActiveSubscriptionsAsync(User, format, serviceId);
+                return Ok(subscriptions);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
         }
 
         [Authorize]

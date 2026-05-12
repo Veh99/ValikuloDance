@@ -9,7 +9,6 @@ using ValikuloDance.Api.Settings;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Application.Services;
 using ValikuloDance.Infrastructure.Data;
-using ValikuloDance.Resources;
 
 namespace ValikuloDance
 {
@@ -21,7 +20,7 @@ namespace ValikuloDance
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
 
-            var key = Encoding.UTF8.GetBytes(StaticJWTKey.JWTKey);
+            var key = Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:SecretKey"]!);
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;

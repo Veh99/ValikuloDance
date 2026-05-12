@@ -150,7 +150,7 @@ namespace ValikuloDance.Application.Services
         public async Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenDto refreshTokenDto)
         {
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.RefreshToken == refreshTokenDto.RefreshToken);
+                .FirstOrDefaultAsync(u => u.RefreshToken == refreshTokenDto.RefreshToken && !u.IsDeleted);
 
             if (user == null)
                 throw new UnauthorizedAccessException("Неверный refresh token");

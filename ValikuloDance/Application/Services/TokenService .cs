@@ -7,7 +7,6 @@ using System.Text;
 using ValikuloDance.Api.Settings;
 using ValikuloDance.Application.Interfaces;
 using ValikuloDance.Domain.Entities;
-using ValikuloDance.Resources;
 using JsonWebTokens = Microsoft.IdentityModel.JsonWebTokens;
 
 namespace ValikuloDance.Application.Services
@@ -15,20 +14,14 @@ namespace ValikuloDance.Application.Services
     public class TokenService : ITokenService
     {
         private readonly JwtSettings _jwtSettings;
-        private readonly IConfiguration _configuration;
 
-        public TokenService(IOptions<JwtSettings> jwtSettings, IConfiguration configuration)
+        public TokenService(IOptions<JwtSettings> jwtSettings)
         {
             _jwtSettings = jwtSettings.Value;
-            _configuration = configuration;
         }
 
         public string GenerateToken(User user)
         {
-            var secretKey = _configuration["JwtSettings:SecretKey"]!;
-            var issuer = _configuration["JwtSettings:Issuer"];
-            var audience = _configuration["JwtSettings:Audience"];
-
             var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
@@ -44,17 +37,17 @@ namespace ValikuloDance.Application.Services
                 claims.Add(new Claim(JwtRegisteredClaimNames.PhoneNumber, user.Phone));
             }
 
-            var encodeKey = Encoding.UTF8.GetBytes(StaticJWTKey.JWTKey);
+            var encodeKey = Encoding.UTF8.GetBytes(_jwtSettings.SecretKey);
             
             var key = new SymmetricSecurityKey(encodeKey);
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var token = new JwtSecurityToken(
-                issuer: issuer,
-                audience: audience,
+                issuer: _jwtSettings.Issuer,
+                audience: _jwtSettings.Audience,
                 claims: claims,
-                //notBefore: DateTime.UtcNow,
-                expires: DateTime.UtcNow.AddMinutes(60),
+                notBefore: DateTime.UtcNow,
+                expires: DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes),
                 signingCredentials: credentials
             );
 

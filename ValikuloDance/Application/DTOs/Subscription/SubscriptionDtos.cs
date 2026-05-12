@@ -6,6 +6,7 @@ namespace ValikuloDance.Application.DTOs.Subscription
         public required string Name { get; set; }
         public string? Description { get; set; }
         public required string Format { get; set; }
+        public Guid? SourceServiceId { get; set; }
         public required int SessionsCount { get; set; }
         public required int ValidityMonths { get; set; }
         public required decimal Price { get; set; }
@@ -42,6 +43,7 @@ namespace ValikuloDance.Application.DTOs.Subscription
         public required Guid Id { get; set; }
         public required string PlanName { get; set; }
         public required string Format { get; set; }
+        public Guid? SourceServiceId { get; set; }
         public required int RemainingSessions { get; set; }
         public DateTime? ExpiresAt { get; set; }
     }
